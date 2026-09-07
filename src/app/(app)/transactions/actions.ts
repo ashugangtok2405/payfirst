@@ -4,7 +4,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { TRANSFER_LABELS } from "@/lib/transactions";
-import type { Prisma } from "@prisma/client";
+import type { Prisma, Transaction } from "@prisma/client";
 
 async function requireUserId() {
   const session = await auth();
@@ -66,8 +66,22 @@ function applyTargetDelta(type: string, id: string, amount: number): Prisma.Pris
   throw new Error("Invalid account type.");
 }
 
-export async function createTransaction(formData: FormData) {
-  const userId = await requireUserId();
+type TransactionData = {
+  type: string;
+  amount: number;
+  date: Date;
+  category: string | null;
+  note: string | null;
+  fromAccountType: string | null;
+  fromAccountId: string | null;
+  toAccountType: string | null;
+  toAccountId: string | null;
+};
+
+async function buildEffect(
+  formData: FormData,
+  userId: string
+): Promise<{ data: TransactionData; ops: Prisma.PrismaPromise<unknown>[] }> {
   const type = String(formData.get("type") ?? "expense");
   const amount = Number(formData.get("amount") ?? 0);
   const dateRaw = String(formData.get("date") ?? "");
@@ -80,68 +94,67 @@ export async function createTransaction(formData: FormData) {
     const bankAccountId = String(formData.get("bankAccountId") ?? "");
     const category = String(formData.get("category") ?? "Other");
     await assertOwnedBankAccount(bankAccountId, userId);
+    return {
+      data: {
+        type,
+        amount,
+        date,
+        note,
+        category,
+        fromAccountType: "bank",
+        fromAccountId: bankAccountId,
+        toAccountType: null,
+        toAccountId: null,
+      },
+      ops: [prisma.bankAccount.update({ where: { id: bankAccountId }, data: { balance: { decrement: amount } } })],
+    };
+  }
 
-    await prisma.$transaction([
-      prisma.transaction.create({
-        data: { userId, type, amount, date, category, note, fromAccountType: "bank", fromAccountId: bankAccountId },
-      }),
-      prisma.bankAccount.update({ where: { id: bankAccountId }, data: { balance: { decrement: amount } } }),
-    ]);
-  } else if (type === "income") {
+  if (type === "income") {
     const bankAccountId = String(formData.get("bankAccountId") ?? "");
     const category = String(formData.get("category") ?? "Other");
     await assertOwnedBankAccount(bankAccountId, userId);
+    return {
+      data: {
+        type,
+        amount,
+        date,
+        note,
+        category,
+        fromAccountType: null,
+        fromAccountId: null,
+        toAccountType: "bank",
+        toAccountId: bankAccountId,
+      },
+      ops: [prisma.bankAccount.update({ where: { id: bankAccountId }, data: { balance: { increment: amount } } })],
+    };
+  }
 
-    await prisma.$transaction([
-      prisma.transaction.create({
-        data: { userId, type, amount, date, category, note, toAccountType: "bank", toAccountId: bankAccountId },
-      }),
-      prisma.bankAccount.update({ where: { id: bankAccountId }, data: { balance: { increment: amount } } }),
-    ]);
-  } else if (type === "transfer") {
+  if (type === "transfer") {
     const fromAccountId = String(formData.get("fromAccountId") ?? "");
     const [toAccountType, toAccountId] = String(formData.get("to") ?? "").split(":");
     if (!toAccountType || !toAccountId) throw new Error("Choose a destination.");
     if (toAccountType === "bank" && fromAccountId === toAccountId) {
       throw new Error("Source and destination must be different.");
     }
-
     await assertOwnedBankAccount(fromAccountId, userId);
     await assertOwnedTarget(toAccountType, toAccountId, userId);
     const category = TRANSFER_LABELS[toAccountType] ?? "Transfer";
 
-    await prisma.$transaction([
-      prisma.transaction.create({
-        data: {
-          userId,
-          type,
-          amount,
-          date,
-          category,
-          note,
-          fromAccountType: "bank",
-          fromAccountId,
-          toAccountType,
-          toAccountId,
-        },
-      }),
-      prisma.bankAccount.update({ where: { id: fromAccountId }, data: { balance: { decrement: amount } } }),
-      applyTargetDelta(toAccountType, toAccountId, amount),
-    ]);
-  } else {
-    throw new Error("Invalid transaction type.");
+    return {
+      data: { type, amount, date, note, category, fromAccountType: "bank", fromAccountId, toAccountType, toAccountId },
+      ops: [
+        prisma.bankAccount.update({ where: { id: fromAccountId }, data: { balance: { decrement: amount } } }),
+        applyTargetDelta(toAccountType, toAccountId, amount),
+      ],
+    };
   }
 
-  revalidateAll();
+  throw new Error("Invalid transaction type.");
 }
 
-export async function deleteTransaction(id: string) {
-  const userId = await requireUserId();
-  const txn = await prisma.transaction.findUnique({ where: { id } });
-  if (!txn || txn.userId !== userId) throw new Error("Not found");
-
-  const ops: Prisma.PrismaPromise<unknown>[] = [prisma.transaction.delete({ where: { id } })];
-
+function reverseEffect(txn: Transaction): Prisma.PrismaPromise<unknown>[] {
+  const ops: Prisma.PrismaPromise<unknown>[] = [];
   if (txn.type === "expense" && txn.fromAccountId) {
     ops.push(prisma.bankAccount.update({ where: { id: txn.fromAccountId }, data: { balance: { increment: txn.amount } } }));
   } else if (txn.type === "income" && txn.toAccountId) {
@@ -150,7 +163,34 @@ export async function deleteTransaction(id: string) {
     ops.push(prisma.bankAccount.update({ where: { id: txn.fromAccountId }, data: { balance: { increment: txn.amount } } }));
     ops.push(applyTargetDelta(txn.toAccountType, txn.toAccountId, -txn.amount));
   }
+  return ops;
+}
 
-  await prisma.$transaction(ops);
+export async function createTransaction(formData: FormData) {
+  const userId = await requireUserId();
+  const { data, ops } = await buildEffect(formData, userId);
+
+  await prisma.$transaction([prisma.transaction.create({ data: { ...data, userId } }), ...ops]);
+  revalidateAll();
+}
+
+export async function updateTransaction(id: string, formData: FormData) {
+  const userId = await requireUserId();
+  const existing = await prisma.transaction.findUnique({ where: { id } });
+  if (!existing || existing.userId !== userId) throw new Error("Not found");
+
+  const reverseOps = reverseEffect(existing);
+  const { data, ops } = await buildEffect(formData, userId);
+
+  await prisma.$transaction([...reverseOps, prisma.transaction.update({ where: { id }, data }), ...ops]);
+  revalidateAll();
+}
+
+export async function deleteTransaction(id: string) {
+  const userId = await requireUserId();
+  const txn = await prisma.transaction.findUnique({ where: { id } });
+  if (!txn || txn.userId !== userId) throw new Error("Not found");
+
+  await prisma.$transaction([...reverseEffect(txn), prisma.transaction.delete({ where: { id } })]);
   revalidateAll();
 }

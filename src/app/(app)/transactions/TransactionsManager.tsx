@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import type { BankAccount, CreditCard, Loan, MutualFund, Transaction } from "@prisma/client";
-import { createTransaction, deleteTransaction } from "./actions";
+import { createTransaction, updateTransaction, deleteTransaction } from "./actions";
 import { TextField, SelectField, primaryButtonClass, ghostButtonClass, dangerButtonClass } from "@/components/form";
 import { formatMoney } from "@/lib/format";
 import { EXPENSE_CATEGORIES, INCOME_CATEGORIES } from "@/lib/transactions";
@@ -15,13 +15,121 @@ type Props = {
   funds: MutualFund[];
 };
 
+type TxnType = "expense" | "income" | "transfer";
+
 function todayInputValue() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function toDateInputValue(date: Date) {
+  return new Date(date).toISOString().slice(0, 10);
+}
+
+function TransactionFields({
+  type,
+  setType,
+  bankAccounts,
+  cards,
+  loans,
+  funds,
+  txn,
+}: {
+  type: TxnType;
+  setType: (t: TxnType) => void;
+  bankAccounts: BankAccount[];
+  cards: CreditCard[];
+  loans: Loan[];
+  funds: MutualFund[];
+  txn?: Transaction;
+}) {
+  const toOptions = [
+    ...cards.map((c) => ({ value: `card:${c.id}`, label: `Credit Card · ${c.cardName}` })),
+    ...loans.map((l) => ({ value: `loan:${l.id}`, label: `Loan · ${l.loanName}` })),
+    ...funds.map((f) => ({ value: `fund:${f.id}`, label: `Mutual Fund · ${f.fundName}` })),
+    ...bankAccounts.map((a) => ({ value: `bank:${a.id}`, label: `Bank Account · ${a.accountName}` })),
+  ];
+
+  const bankAccountDefault = type === "expense" ? txn?.fromAccountId ?? undefined : txn?.toAccountId ?? undefined;
+  const toDefault = txn?.toAccountType && txn?.toAccountId ? `${txn.toAccountType}:${txn.toAccountId}` : undefined;
+
+  return (
+    <>
+      <div className="flex gap-2">
+        {(["expense", "income", "transfer"] as const).map((t) => (
+          <label
+            key={t}
+            className={`flex-1 text-center capitalize rounded-lg border px-3 py-2 text-sm font-medium cursor-pointer ${
+              type === t ? "bg-slate-900 text-white border-slate-900" : "border-slate-300 text-slate-600"
+            }`}
+          >
+            <input type="radio" name="type" value={t} checked={type === t} onChange={() => setType(t)} className="sr-only" />
+            {t}
+          </label>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {(type === "expense" || type === "income") && (
+          <>
+            <SelectField
+              label={type === "expense" ? "Pay from" : "Deposit to"}
+              name="bankAccountId"
+              defaultValue={bankAccountDefault}
+              options={bankAccounts.map((a) => ({ value: a.id, label: `${a.accountName} (${a.bankName})` }))}
+            />
+            <SelectField
+              label="Category"
+              name="category"
+              defaultValue={txn?.category ?? undefined}
+              options={(type === "expense" ? EXPENSE_CATEGORIES : INCOME_CATEGORIES).map((c) => ({ value: c, label: c }))}
+            />
+          </>
+        )}
+
+        {type === "transfer" && (
+          <>
+            <SelectField
+              label="From (bank account)"
+              name="fromAccountId"
+              defaultValue={txn?.fromAccountId ?? undefined}
+              options={bankAccounts.map((a) => ({ value: a.id, label: `${a.accountName} (${a.bankName})` }))}
+            />
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">To</label>
+              <select
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900"
+                name="to"
+                defaultValue={toDefault}
+              >
+                {toOptions.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </>
+        )}
+
+        <TextField label="Amount (₹)" name="amount" type="number" step="0.01" required defaultValue={txn?.amount} />
+        <TextField
+          label="Date"
+          name="date"
+          type="date"
+          defaultValue={txn ? toDateInputValue(txn.date) : todayInputValue()}
+          required
+        />
+        <TextField label="Note" name="note" placeholder="Optional" defaultValue={txn?.note ?? undefined} />
+      </div>
+    </>
+  );
+}
+
 export default function TransactionsManager({ transactions, bankAccounts, cards, loans, funds }: Props) {
   const [adding, setAdding] = useState(false);
-  const [type, setType] = useState<"expense" | "income" | "transfer">("expense");
+  const [addType, setAddType] = useState<TxnType>("expense");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editType, setEditType] = useState<TxnType>("expense");
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
@@ -60,6 +168,20 @@ export default function TransactionsManager({ transactions, bankAccounts, cards,
     });
   }
 
+  function handleUpdate(id: string, e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setError(null);
+    const formData = new FormData(e.currentTarget);
+    startTransition(async () => {
+      try {
+        await updateTransaction(id, formData);
+        setEditingId(null);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Could not save transaction.");
+      }
+    });
+  }
+
   function handleDelete(id: string, label: string) {
     if (!confirm(`Delete "${label}"? This will reverse its effect on your balances.`)) return;
     startTransition(async () => {
@@ -67,12 +189,10 @@ export default function TransactionsManager({ transactions, bankAccounts, cards,
     });
   }
 
-  const toOptions = [
-    ...cards.map((c) => ({ value: `card:${c.id}`, label: `Credit Card · ${c.cardName}` })),
-    ...loans.map((l) => ({ value: `loan:${l.id}`, label: `Loan · ${l.loanName}` })),
-    ...funds.map((f) => ({ value: `fund:${f.id}`, label: `Mutual Fund · ${f.fundName}` })),
-    ...bankAccounts.map((a) => ({ value: `bank:${a.id}`, label: `Bank Account · ${a.accountName}` })),
-  ];
+  function startEdit(txn: Transaction) {
+    setEditType(txn.type as TxnType);
+    setEditingId(txn.id);
+  }
 
   return (
     <div className="space-y-4">
@@ -81,7 +201,13 @@ export default function TransactionsManager({ transactions, bankAccounts, cards,
           <h1 className="text-xl font-semibold text-slate-900">Transactions</h1>
           <p className="text-sm text-slate-500">Log day-to-day spending, income, and payments between your accounts.</p>
         </div>
-        <button onClick={() => setAdding((v) => !v)} className={primaryButtonClass}>
+        <button
+          onClick={() => {
+            setAdding((v) => !v);
+            setEditingId(null);
+          }}
+          className={primaryButtonClass}
+        >
           {adding ? "Cancel" : "+ Add transaction"}
         </button>
       </div>
@@ -96,71 +222,7 @@ export default function TransactionsManager({ transactions, bankAccounts, cards,
 
       {adding && bankAccounts.length > 0 && (
         <form onSubmit={handleCreate} className="bg-white border border-slate-200 rounded-xl p-5 space-y-4">
-          <div className="flex gap-2">
-            {(["expense", "income", "transfer"] as const).map((t) => (
-              <label
-                key={t}
-                className={`flex-1 text-center capitalize rounded-lg border px-3 py-2 text-sm font-medium cursor-pointer ${
-                  type === t ? "bg-slate-900 text-white border-slate-900" : "border-slate-300 text-slate-600"
-                }`}
-              >
-                <input
-                  type="radio"
-                  name="type"
-                  value={t}
-                  checked={type === t}
-                  onChange={() => setType(t)}
-                  className="sr-only"
-                />
-                {t}
-              </label>
-            ))}
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {(type === "expense" || type === "income") && (
-              <>
-                <SelectField
-                  label={type === "expense" ? "Pay from" : "Deposit to"}
-                  name="bankAccountId"
-                  options={bankAccounts.map((a) => ({ value: a.id, label: `${a.accountName} (${a.bankName})` }))}
-                />
-                <SelectField
-                  label="Category"
-                  name="category"
-                  options={(type === "expense" ? EXPENSE_CATEGORIES : INCOME_CATEGORIES).map((c) => ({ value: c, label: c }))}
-                />
-              </>
-            )}
-
-            {type === "transfer" && (
-              <>
-                <SelectField
-                  label="From (bank account)"
-                  name="fromAccountId"
-                  options={bankAccounts.map((a) => ({ value: a.id, label: `${a.accountName} (${a.bankName})` }))}
-                />
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">To</label>
-                  <select
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900"
-                    name="to"
-                  >
-                    {toOptions.map((opt) => (
-                      <option key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </>
-            )}
-
-            <TextField label="Amount (₹)" name="amount" type="number" step="0.01" required />
-            <TextField label="Date" name="date" type="date" defaultValue={todayInputValue()} required />
-            <TextField label="Note" name="note" placeholder="Optional" />
-          </div>
-
+          <TransactionFields type={addType} setType={setAddType} bankAccounts={bankAccounts} cards={cards} loans={loans} funds={funds} />
           <div className="flex justify-end gap-2">
             <button type="submit" disabled={pending} className={primaryButtonClass}>
               Save transaction
@@ -173,9 +235,32 @@ export default function TransactionsManager({ transactions, bankAccounts, cards,
         {transactions.length === 0 && (
           <p className="p-6 text-sm text-slate-500 text-center">No transactions logged yet.</p>
         )}
-        {transactions.map((txn) => {
-          const isOutflow = txn.type === "expense" || (txn.type === "transfer" && txn.fromAccountId);
-          return (
+        {transactions.map((txn) =>
+          editingId === txn.id ? (
+            <form
+              key={txn.id}
+              onSubmit={(e) => handleUpdate(txn.id, e)}
+              className="p-5 space-y-4"
+            >
+              <TransactionFields
+                type={editType}
+                setType={setEditType}
+                bankAccounts={bankAccounts}
+                cards={cards}
+                loans={loans}
+                funds={funds}
+                txn={txn}
+              />
+              <div className="flex justify-end gap-2">
+                <button type="button" onClick={() => setEditingId(null)} className={ghostButtonClass}>
+                  Cancel
+                </button>
+                <button type="submit" disabled={pending} className={primaryButtonClass}>
+                  Save changes
+                </button>
+              </div>
+            </form>
+          ) : (
             <div key={txn.id} className="p-4 sm:p-5 flex items-center justify-between gap-4">
               <div>
                 <p className="font-medium text-slate-900 text-sm">{describe(txn)}</p>
@@ -189,13 +274,22 @@ export default function TransactionsManager({ transactions, bankAccounts, cards,
                   {txn.type === "income" ? "+" : "−"}
                   {formatMoney(txn.amount)}
                 </span>
+                <button
+                  onClick={() => {
+                    setAdding(false);
+                    startEdit(txn);
+                  }}
+                  className={ghostButtonClass}
+                >
+                  Edit
+                </button>
                 <button onClick={() => handleDelete(txn.id, describe(txn))} className={dangerButtonClass}>
                   Delete
                 </button>
               </div>
             </div>
-          );
-        })}
+          )
+        )}
       </div>
     </div>
   );
