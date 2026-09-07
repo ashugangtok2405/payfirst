@@ -23,6 +23,7 @@ model User {
   loans        Loan[]
   mutualFunds  MutualFund[]
   debts        Debt[]
+  transactions Transaction[]
 }
 
 model BankAccount {
@@ -92,6 +93,22 @@ model MutualFund {
   notes         String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+}
+
+model Transaction {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type            String // expense, income, transfer
+  amount          Float
+  date            DateTime
+  category        String?
+  note            String?
+  fromAccountType String? // bank
+  fromAccountId   String?
+  toAccountType   String? // bank, card, loan, fund
+  toAccountId     String?
+  createdAt       DateTime @default(now())
 }
 
 model Debt {

@@ -3,6 +3,7 @@ import { auth, signOut } from "@/lib/auth";
 
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard" },
+  { href: "/transactions", label: "Transactions" },
   { href: "/accounts", label: "Bank Accounts" },
   { href: "/cards", label: "Credit Cards" },
   { href: "/loans", label: "Loans" },
