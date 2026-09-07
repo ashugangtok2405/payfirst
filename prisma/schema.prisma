@@ -1,0 +1,109 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String?
+  passwordHash String
+  createdAt    DateTime @default(now())
+
+  bankAccounts BankAccount[]
+  creditCards  CreditCard[]
+  loans        Loan[]
+  mutualFunds  MutualFund[]
+  debts        Debt[]
+}
+
+model BankAccount {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accountName   String
+  bankName      String
+  accountType   String // savings, current, salary, nri, other
+  last4         String?
+  balance       Float    @default(0)
+  notes         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model CreditCard {
+  id             String   @id @default(cuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cardName       String
+  bankName       String
+  last4          String?
+  creditLimit    Float
+  currentBalance Float    @default(0)
+  statementDay   Int // day of month statement generates
+  dueDay         Int // day of month payment is due
+  minPayment     Float?
+  apr            Float?
+  notes          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model Loan {
+  id               String   @id @default(cuid())
+  userId           String
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  loanName         String
+  lender           String
+  loanType         String // home, car, personal, education, gold, other
+  principal        Float
+  outstanding      Float
+  interestRate     Float?
+  emiAmount        Float?
+  emiDueDay        Int // day of month EMI is due
+  startDate        DateTime?
+  tenureMonths     Int?
+  notes            String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model MutualFund {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fundName      String
+  fundHouse     String?
+  folioNumber   String?
+  category      String? // equity, debt, hybrid, index, other
+  units         Float?
+  investedValue Float    @default(0)
+  currentValue  Float    @default(0)
+  sipAmount     Float?
+  sipDueDay     Int? // day of month SIP is debited, null if no active SIP
+  notes         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model Debt {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  personName  String
+  direction   String // owed_by_me, owed_to_me
+  amount      Float
+  dueDate     DateTime?
+  notes       String?
+  settled     Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
