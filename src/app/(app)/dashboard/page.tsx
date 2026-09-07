@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { formatMoney } from "@/lib/format";
 import { nextOccurrenceForDay, daysUntil, urgencyFromDays, urgencyStyles, urgencyLabels, type Urgency } from "@/lib/dueDates";
+import RemindersCard from "../reminders/RemindersCard";
 
 type DueItem = {
   key: string;
@@ -19,12 +20,13 @@ export default async function DashboardPage() {
   const session = await auth();
   const userId = session!.user.id;
 
-  const [accounts, cards, loans, funds, debts] = await Promise.all([
+  const [accounts, cards, loans, funds, debts, user] = await Promise.all([
     prisma.bankAccount.findMany({ where: { userId } }),
     prisma.creditCard.findMany({ where: { userId } }),
     prisma.loan.findMany({ where: { userId } }),
     prisma.mutualFund.findMany({ where: { userId } }),
     prisma.debt.findMany({ where: { userId, settled: false } }),
+    prisma.user.findUnique({ where: { id: userId }, select: { reminderDaysBefore: true } }),
   ]);
 
   const dueItems: DueItem[] = [];
@@ -150,6 +152,8 @@ export default async function DashboardPage() {
           </Link>
         ))}
       </div>
+
+      <RemindersCard reminderDaysBefore={user?.reminderDaysBefore ?? 3} />
 
       <div className="bg-white border border-slate-200 rounded-xl">
         <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">

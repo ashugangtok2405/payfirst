@@ -12,18 +12,43 @@ datasource db {
 }
 
 model User {
-  id           String   @id @default(cuid())
-  email        String   @unique
-  name         String?
-  passwordHash String
-  createdAt    DateTime @default(now())
+  id                 String   @id @default(cuid())
+  email              String   @unique
+  name               String?
+  passwordHash       String
+  reminderDaysBefore Int      @default(3)
+  createdAt          DateTime @default(now())
 
-  bankAccounts BankAccount[]
-  creditCards  CreditCard[]
-  loans        Loan[]
-  mutualFunds  MutualFund[]
-  debts        Debt[]
-  transactions Transaction[]
+  bankAccounts      BankAccount[]
+  creditCards       CreditCard[]
+  loans             Loan[]
+  mutualFunds       MutualFund[]
+  debts             Debt[]
+  transactions      Transaction[]
+  pushSubscriptions PushSubscription[]
+  sentReminders     SentReminder[]
+}
+
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+}
+
+// Tracks which (item, due date) reminders have already been sent so the
+// daily scheduled job never notifies the same upcoming due date twice.
+model SentReminder {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  key       String // e.g. "card:<id>:2026-09-10"
+  sentAt    DateTime @default(now())
+
+  @@unique([userId, key])
 }
 
 model BankAccount {

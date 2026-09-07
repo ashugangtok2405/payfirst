@@ -2,11 +2,37 @@
 // integer. These helpers turn that into a concrete next-occurrence date and an
 // urgency bucket so the dashboard can highlight what needs attention first.
 
+// All "what day is it" calculations are anchored to this timezone rather than the
+// server's own clock - deployed hosts (e.g. Netlify) run in UTC, which would
+// otherwise make "today" lag a calendar day behind India for part of each day.
+const APP_TIMEZONE = "Asia/Kolkata";
+
 function daysInMonth(year: number, month: number) {
   return new Date(year, month + 1, 0).getDate();
 }
 
-export function nextOccurrenceForDay(day: number, today: Date = new Date()): Date {
+export function todayInAppTimeZone(): Date {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: APP_TIMEZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const get = (type: string) => Number(parts.find((p) => p.type === type)!.value);
+  return new Date(get("year"), get("month") - 1, get("day"));
+}
+
+// Formats a calendar-day Date (constructed via `new Date(y, m, d)`) as YYYY-MM-DD
+// using its local components - NOT toISOString(), which would convert through UTC
+// and can shift the date by a day depending on the server's timezone.
+export function formatDateKey(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+export function nextOccurrenceForDay(day: number, today: Date = todayInAppTimeZone()): Date {
   const clampedDay = Math.min(Math.max(day, 1), 31);
   const y = today.getFullYear();
   const m = today.getMonth();
@@ -26,7 +52,7 @@ export function nextOccurrenceForDay(day: number, today: Date = new Date()): Dat
   return new Date(y, m + 1, nextMonthDay);
 }
 
-export function daysUntil(date: Date, today: Date = new Date()): number {
+export function daysUntil(date: Date, today: Date = todayInAppTimeZone()): number {
   const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
   const target = new Date(date.getFullYear(), date.getMonth(), date.getDate());
   const diffMs = target.getTime() - todayStart.getTime();
