@@ -42,14 +42,30 @@ function TransactionFields({
   funds: MutualFund[];
   txn?: Transaction;
 }) {
-  const toOptions = [
-    ...cards.map((c) => ({ value: `card:${c.id}`, label: `Credit Card · ${c.cardName}` })),
-    ...loans.map((l) => ({ value: `loan:${l.id}`, label: `Loan · ${l.loanName}` })),
-    ...funds.map((f) => ({ value: `fund:${f.id}`, label: `Mutual Fund · ${f.fundName}` })),
+  const fromOptions = [
     ...bankAccounts.map((a) => ({ value: `bank:${a.id}`, label: `Bank Account · ${a.accountName}` })),
+    ...cards.map((c) => ({ value: `card:${c.id}`, label: `Credit Card · ${c.cardName}` })),
   ];
 
   const bankAccountDefault = type === "expense" ? txn?.fromAccountId ?? undefined : txn?.toAccountId ?? undefined;
+
+  const initialFrom =
+    txn?.type === "transfer" && txn.fromAccountType && txn.fromAccountId
+      ? `${txn.fromAccountType}:${txn.fromAccountId}`
+      : (fromOptions[0]?.value ?? "");
+  const [fromValue, setFromValue] = useState(initialFrom);
+  const fromType = fromValue.split(":")[0];
+
+  const toOptions =
+    fromType === "card"
+      ? bankAccounts.map((a) => ({ value: `bank:${a.id}`, label: `Bank Account · ${a.accountName}` }))
+      : [
+          ...cards.map((c) => ({ value: `card:${c.id}`, label: `Credit Card · ${c.cardName}` })),
+          ...loans.map((l) => ({ value: `loan:${l.id}`, label: `Loan · ${l.loanName}` })),
+          ...funds.map((f) => ({ value: `fund:${f.id}`, label: `Mutual Fund · ${f.fundName}` })),
+          ...bankAccounts.map((a) => ({ value: `bank:${a.id}`, label: `Bank Account · ${a.accountName}` })),
+        ];
+
   const toDefault = txn?.toAccountType && txn?.toAccountId ? `${txn.toAccountType}:${txn.toAccountId}` : undefined;
 
   return (
@@ -88,15 +104,26 @@ function TransactionFields({
 
         {type === "transfer" && (
           <>
-            <SelectField
-              label="From (bank account)"
-              name="fromAccountId"
-              defaultValue={txn?.fromAccountId ?? undefined}
-              options={bankAccounts.map((a) => ({ value: a.id, label: `${a.accountName} (${a.bankName})` }))}
-            />
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">From</label>
+              <select
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900"
+                name="from"
+                value={fromValue}
+                onChange={(e) => setFromValue(e.target.value)}
+              >
+                {fromOptions.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+              {fromType === "card" && <p className="text-xs text-slate-400 mt-1">Cash advance — increases what you owe on the card.</p>}
+            </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">To</label>
               <select
+                key={fromType}
                 className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900"
                 name="to"
                 defaultValue={toDefault}
@@ -149,7 +176,7 @@ export default function TransactionsManager({ transactions, bankAccounts, cards,
     if (txn.type === "income") {
       return `${txn.category ?? "Income"} · ${accountLabel.get(`bank-${txn.toAccountId}`) ?? "Bank"}`;
     }
-    const from = accountLabel.get(`bank-${txn.fromAccountId}`) ?? "Bank";
+    const from = accountLabel.get(`${txn.fromAccountType}-${txn.fromAccountId}`) ?? "?";
     const to = accountLabel.get(`${txn.toAccountType}-${txn.toAccountId}`) ?? "?";
     return `${txn.category ?? "Transfer"} · ${from} → ${to}`;
   }

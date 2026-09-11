@@ -3,7 +3,7 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
-import { TRANSFER_LABELS } from "@/lib/transactions";
+import { deriveTransferCategory } from "@/lib/transactions";
 import type { Prisma, Transaction } from "@prisma/client";
 
 async function requireUserId() {
@@ -21,14 +21,12 @@ function revalidateAll() {
   revalidatePath("/mutual-funds");
 }
 
-async function assertOwnedBankAccount(id: string, userId: string) {
-  const account = await prisma.bankAccount.findUnique({ where: { id } });
-  if (!account || account.userId !== userId) throw new Error("Bank account not found.");
-  return account;
-}
-
-async function assertOwnedTarget(type: string, id: string, userId: string) {
-  if (type === "bank") return assertOwnedBankAccount(id, userId);
+async function assertOwnedAccount(type: string, id: string, userId: string) {
+  if (type === "bank") {
+    const account = await prisma.bankAccount.findUnique({ where: { id } });
+    if (!account || account.userId !== userId) throw new Error("Bank account not found.");
+    return account;
+  }
   if (type === "card") {
     const card = await prisma.creditCard.findUnique({ where: { id } });
     if (!card || card.userId !== userId) throw new Error("Credit card not found.");
@@ -47,17 +45,26 @@ async function assertOwnedTarget(type: string, id: string, userId: string) {
   throw new Error("Invalid account type.");
 }
 
-function applyTargetDelta(type: string, id: string, amount: number): Prisma.PrismaPromise<unknown> {
+// Applies (or, given a negated amount, reverses) the balance effect of `amount`
+// moving through an account as either its "source" or "destination" in a
+// transaction. Only bank accounts and credit cards can act as a source -
+// loans and mutual funds are destination-only (EMI paydown / investment).
+function moveDelta(type: string, id: string, amount: number, role: "source" | "destination"): Prisma.PrismaPromise<unknown> {
   if (type === "bank") {
-    return prisma.bankAccount.update({ where: { id }, data: { balance: { increment: amount } } });
+    const delta = role === "source" ? -amount : amount;
+    return prisma.bankAccount.update({ where: { id }, data: { balance: { increment: delta } } });
   }
   if (type === "card") {
-    return prisma.creditCard.update({ where: { id }, data: { currentBalance: { decrement: amount } } });
+    // As a source (cash advance) the card owes more; as a destination (bill payment) it owes less.
+    const delta = role === "source" ? amount : -amount;
+    return prisma.creditCard.update({ where: { id }, data: { currentBalance: { increment: delta } } });
   }
   if (type === "loan") {
-    return prisma.loan.update({ where: { id }, data: { outstanding: { decrement: amount } } });
+    if (role !== "destination") throw new Error("A loan can only be a transfer destination.");
+    return prisma.loan.update({ where: { id }, data: { outstanding: { increment: -amount } } });
   }
   if (type === "fund") {
+    if (role !== "destination") throw new Error("A mutual fund can only be a transfer destination.");
     return prisma.mutualFund.update({
       where: { id },
       data: { investedValue: { increment: amount }, currentValue: { increment: amount } },
@@ -93,7 +100,7 @@ async function buildEffect(
   if (type === "expense") {
     const bankAccountId = String(formData.get("bankAccountId") ?? "");
     const category = String(formData.get("category") ?? "Other");
-    await assertOwnedBankAccount(bankAccountId, userId);
+    await assertOwnedAccount("bank", bankAccountId, userId);
     return {
       data: {
         type,
@@ -106,14 +113,14 @@ async function buildEffect(
         toAccountType: null,
         toAccountId: null,
       },
-      ops: [prisma.bankAccount.update({ where: { id: bankAccountId }, data: { balance: { decrement: amount } } })],
+      ops: [moveDelta("bank", bankAccountId, amount, "source")],
     };
   }
 
   if (type === "income") {
     const bankAccountId = String(formData.get("bankAccountId") ?? "");
     const category = String(formData.get("category") ?? "Other");
-    await assertOwnedBankAccount(bankAccountId, userId);
+    await assertOwnedAccount("bank", bankAccountId, userId);
     return {
       data: {
         type,
@@ -126,26 +133,31 @@ async function buildEffect(
         toAccountType: "bank",
         toAccountId: bankAccountId,
       },
-      ops: [prisma.bankAccount.update({ where: { id: bankAccountId }, data: { balance: { increment: amount } } })],
+      ops: [moveDelta("bank", bankAccountId, amount, "destination")],
     };
   }
 
   if (type === "transfer") {
-    const fromAccountId = String(formData.get("fromAccountId") ?? "");
+    const [fromAccountType, fromAccountId] = String(formData.get("from") ?? "").split(":");
     const [toAccountType, toAccountId] = String(formData.get("to") ?? "").split(":");
+    if (!fromAccountType || !fromAccountId) throw new Error("Choose a source.");
     if (!toAccountType || !toAccountId) throw new Error("Choose a destination.");
-    if (toAccountType === "bank" && fromAccountId === toAccountId) {
+    if (fromAccountType === toAccountType && fromAccountId === toAccountId) {
       throw new Error("Source and destination must be different.");
     }
-    await assertOwnedBankAccount(fromAccountId, userId);
-    await assertOwnedTarget(toAccountType, toAccountId, userId);
-    const category = TRANSFER_LABELS[toAccountType] ?? "Transfer";
+    if (fromAccountType === "card" && toAccountType !== "bank") {
+      throw new Error("A credit card cash advance can only go to a bank account.");
+    }
+
+    await assertOwnedAccount(fromAccountType, fromAccountId, userId);
+    await assertOwnedAccount(toAccountType, toAccountId, userId);
+    const category = deriveTransferCategory(fromAccountType, toAccountType);
 
     return {
-      data: { type, amount, date, note, category, fromAccountType: "bank", fromAccountId, toAccountType, toAccountId },
+      data: { type, amount, date, note, category, fromAccountType, fromAccountId, toAccountType, toAccountId },
       ops: [
-        prisma.bankAccount.update({ where: { id: fromAccountId }, data: { balance: { decrement: amount } } }),
-        applyTargetDelta(toAccountType, toAccountId, amount),
+        moveDelta(fromAccountType, fromAccountId, amount, "source"),
+        moveDelta(toAccountType, toAccountId, amount, "destination"),
       ],
     };
   }
@@ -155,13 +167,11 @@ async function buildEffect(
 
 function reverseEffect(txn: Transaction): Prisma.PrismaPromise<unknown>[] {
   const ops: Prisma.PrismaPromise<unknown>[] = [];
-  if (txn.type === "expense" && txn.fromAccountId) {
-    ops.push(prisma.bankAccount.update({ where: { id: txn.fromAccountId }, data: { balance: { increment: txn.amount } } }));
-  } else if (txn.type === "income" && txn.toAccountId) {
-    ops.push(prisma.bankAccount.update({ where: { id: txn.toAccountId }, data: { balance: { decrement: txn.amount } } }));
-  } else if (txn.type === "transfer" && txn.fromAccountId && txn.toAccountType && txn.toAccountId) {
-    ops.push(prisma.bankAccount.update({ where: { id: txn.fromAccountId }, data: { balance: { increment: txn.amount } } }));
-    ops.push(applyTargetDelta(txn.toAccountType, txn.toAccountId, -txn.amount));
+  if (txn.fromAccountType && txn.fromAccountId) {
+    ops.push(moveDelta(txn.fromAccountType, txn.fromAccountId, -txn.amount, "source"));
+  }
+  if (txn.toAccountType && txn.toAccountId) {
+    ops.push(moveDelta(txn.toAccountType, txn.toAccountId, -txn.amount, "destination"));
   }
   return ops;
 }

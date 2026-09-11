@@ -19,6 +19,11 @@ export const TRANSFER_LABELS: Record<string, string> = {
   fund: "Investment",
 };
 
+export function deriveTransferCategory(fromType: string, toType: string): string {
+  if (fromType === "card") return "Cash Advance";
+  return TRANSFER_LABELS[toType] ?? "Transfer";
+}
+
 export const ACCOUNT_TYPE_LABELS: Record<string, string> = {
   bank: "Bank Account",
   card: "Credit Card",
