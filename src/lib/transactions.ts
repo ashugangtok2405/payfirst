@@ -24,6 +24,16 @@ export function deriveTransferCategory(fromType: string, toType: string): string
   return TRANSFER_LABELS[toType] ?? "Transfer";
 }
 
+// Combines a fixed default list with any categories the user has already
+// used (via a custom-typed category, or a budget set up for one), so those
+// become normal selectable options from then on. "Other" always stays last.
+export function mergeCategories(defaults: string[], used: string[]): string[] {
+  const withoutOther = defaults.filter((c) => c !== "Other");
+  const known = new Set(defaults);
+  const extra = [...new Set(used.filter((c) => c && !known.has(c)))].sort((a, b) => a.localeCompare(b));
+  return [...withoutOther, ...extra, "Other"];
+}
+
 export const ACCOUNT_TYPE_LABELS: Record<string, string> = {
   bank: "Bank Account",
   card: "Credit Card",

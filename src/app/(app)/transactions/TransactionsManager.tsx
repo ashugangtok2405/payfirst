@@ -3,9 +3,8 @@
 import { useMemo, useState, useTransition } from "react";
 import type { BankAccount, CreditCard, Loan, MutualFund, Transaction } from "@prisma/client";
 import { createTransaction, updateTransaction, deleteTransaction } from "./actions";
-import { TextField, SelectField, primaryButtonClass, ghostButtonClass, dangerButtonClass } from "@/components/form";
+import { TextField, SelectField, inputClass, labelClass, primaryButtonClass, ghostButtonClass, dangerButtonClass } from "@/components/form";
 import { formatMoney } from "@/lib/format";
-import { EXPENSE_CATEGORIES, INCOME_CATEGORIES } from "@/lib/transactions";
 
 type Props = {
   transactions: Transaction[];
@@ -13,7 +12,44 @@ type Props = {
   cards: CreditCard[];
   loans: Loan[];
   funds: MutualFund[];
+  expenseCategories: string[];
+  incomeCategories: string[];
 };
+
+const NEW_CATEGORY_VALUE = "__new__";
+
+function CategoryField({ categories, defaultValue }: { categories: string[]; defaultValue?: string | null }) {
+  const initialIsCustom = !!defaultValue && !categories.includes(defaultValue);
+  const [choice, setChoice] = useState(initialIsCustom ? NEW_CATEGORY_VALUE : (defaultValue ?? categories[0]));
+  const [customValue, setCustomValue] = useState(initialIsCustom ? (defaultValue ?? "") : "");
+
+  return (
+    <div>
+      <label className={labelClass}>Category</label>
+      <select className={inputClass} value={choice} onChange={(e) => setChoice(e.target.value)}>
+        {categories.map((c) => (
+          <option key={c} value={c}>
+            {c}
+          </option>
+        ))}
+        <option value={NEW_CATEGORY_VALUE}>+ Add new category…</option>
+      </select>
+      {choice === NEW_CATEGORY_VALUE ? (
+        <input
+          name="category"
+          required
+          autoFocus
+          placeholder="New category name"
+          value={customValue}
+          onChange={(e) => setCustomValue(e.target.value)}
+          className={`${inputClass} mt-2`}
+        />
+      ) : (
+        <input type="hidden" name="category" value={choice} />
+      )}
+    </div>
+  );
+}
 
 type TxnType = "expense" | "income" | "transfer";
 
@@ -32,6 +68,8 @@ function TransactionFields({
   cards,
   loans,
   funds,
+  expenseCategories,
+  incomeCategories,
   txn,
 }: {
   type: TxnType;
@@ -40,6 +78,8 @@ function TransactionFields({
   cards: CreditCard[];
   loans: Loan[];
   funds: MutualFund[];
+  expenseCategories: string[];
+  incomeCategories: string[];
   txn?: Transaction;
 }) {
   const fromOptions = [
@@ -56,15 +96,12 @@ function TransactionFields({
   const [fromValue, setFromValue] = useState(initialFrom);
   const fromType = fromValue.split(":")[0];
 
-  const toOptions =
-    fromType === "card"
-      ? bankAccounts.map((a) => ({ value: `bank:${a.id}`, label: `Bank Account · ${a.accountName}` }))
-      : [
-          ...cards.map((c) => ({ value: `card:${c.id}`, label: `Credit Card · ${c.cardName}` })),
-          ...loans.map((l) => ({ value: `loan:${l.id}`, label: `Loan · ${l.loanName}` })),
-          ...funds.map((f) => ({ value: `fund:${f.id}`, label: `Mutual Fund · ${f.fundName}` })),
-          ...bankAccounts.map((a) => ({ value: `bank:${a.id}`, label: `Bank Account · ${a.accountName}` })),
-        ];
+  const toOptions = [
+    ...cards.map((c) => ({ value: `card:${c.id}`, label: `Credit Card · ${c.cardName}` })),
+    ...loans.map((l) => ({ value: `loan:${l.id}`, label: `Loan · ${l.loanName}` })),
+    ...funds.map((f) => ({ value: `fund:${f.id}`, label: `Mutual Fund · ${f.fundName}` })),
+    ...bankAccounts.map((a) => ({ value: `bank:${a.id}`, label: `Bank Account · ${a.accountName}` })),
+  ].filter((opt) => opt.value !== fromValue);
 
   const toDefault = txn?.toAccountType && txn?.toAccountId ? `${txn.toAccountType}:${txn.toAccountId}` : undefined;
 
@@ -93,12 +130,7 @@ function TransactionFields({
               defaultValue={bankAccountDefault}
               options={bankAccounts.map((a) => ({ value: a.id, label: `${a.accountName} (${a.bankName})` }))}
             />
-            <SelectField
-              label="Category"
-              name="category"
-              defaultValue={txn?.category ?? undefined}
-              options={(type === "expense" ? EXPENSE_CATEGORIES : INCOME_CATEGORIES).map((c) => ({ value: c, label: c }))}
-            />
+            <CategoryField categories={type === "expense" ? expenseCategories : incomeCategories} defaultValue={txn?.category} />
           </>
         )}
 
@@ -123,7 +155,7 @@ function TransactionFields({
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">To</label>
               <select
-                key={fromType}
+                key={fromValue}
                 className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900"
                 name="to"
                 defaultValue={toDefault}
@@ -152,7 +184,15 @@ function TransactionFields({
   );
 }
 
-export default function TransactionsManager({ transactions, bankAccounts, cards, loans, funds }: Props) {
+export default function TransactionsManager({
+  transactions,
+  bankAccounts,
+  cards,
+  loans,
+  funds,
+  expenseCategories,
+  incomeCategories,
+}: Props) {
   const [adding, setAdding] = useState(false);
   const [addType, setAddType] = useState<TxnType>("expense");
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -249,7 +289,16 @@ export default function TransactionsManager({ transactions, bankAccounts, cards,
 
       {adding && bankAccounts.length > 0 && (
         <form onSubmit={handleCreate} className="bg-white border border-slate-200 rounded-xl p-5 space-y-4">
-          <TransactionFields type={addType} setType={setAddType} bankAccounts={bankAccounts} cards={cards} loans={loans} funds={funds} />
+          <TransactionFields
+            type={addType}
+            setType={setAddType}
+            bankAccounts={bankAccounts}
+            cards={cards}
+            loans={loans}
+            funds={funds}
+            expenseCategories={expenseCategories}
+            incomeCategories={incomeCategories}
+          />
           <div className="flex justify-end gap-2">
             <button type="submit" disabled={pending} className={primaryButtonClass}>
               Save transaction
@@ -276,6 +325,8 @@ export default function TransactionsManager({ transactions, bankAccounts, cards,
                 cards={cards}
                 loans={loans}
                 funds={funds}
+                expenseCategories={expenseCategories}
+                incomeCategories={incomeCategories}
                 txn={txn}
               />
               <div className="flex justify-end gap-2">

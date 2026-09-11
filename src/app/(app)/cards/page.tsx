@@ -4,10 +4,12 @@ import CardsManager from "./CardsManager";
 
 export default async function CardsPage() {
   const session = await auth();
-  const cards = await prisma.creditCard.findMany({
-    where: { userId: session!.user.id },
-    orderBy: { createdAt: "asc" },
-  });
+  const userId = session!.user.id;
 
-  return <CardsManager cards={cards} />;
+  const [cards, bankAccounts] = await Promise.all([
+    prisma.creditCard.findMany({ where: { userId }, orderBy: { createdAt: "asc" } }),
+    prisma.bankAccount.findMany({ where: { userId }, orderBy: { createdAt: "asc" } }),
+  ]);
+
+  return <CardsManager cards={cards} bankAccounts={bankAccounts} />;
 }

@@ -1,11 +1,12 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import type { Loan } from "@prisma/client";
+import type { Loan, BankAccount, CreditCard } from "@prisma/client";
 import { createLoan, updateLoan, deleteLoan } from "./actions";
 import { TextField, SelectField, primaryButtonClass, ghostButtonClass, dangerButtonClass } from "@/components/form";
 import { formatMoney, ordinal } from "@/lib/format";
 import { nextOccurrenceForDay, daysUntil, urgencyFromDays, urgencyStyles } from "@/lib/dueDates";
+import MakePaymentButton from "@/components/MakePaymentButton";
 
 const LOAN_TYPES = [
   { value: "home", label: "Home Loan" },
@@ -21,7 +22,15 @@ function toDateInputValue(date: Date | null) {
   return new Date(date).toISOString().slice(0, 10);
 }
 
-export default function LoansManager({ loans }: { loans: Loan[] }) {
+export default function LoansManager({
+  loans,
+  bankAccounts,
+  cards,
+}: {
+  loans: Loan[];
+  bankAccounts: BankAccount[];
+  cards: CreditCard[];
+}) {
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -153,6 +162,14 @@ export default function LoansManager({ loans }: { loans: Loan[] }) {
                 <span className={`text-xs font-medium border rounded-full px-2.5 py-1 ${urgencyStyles[urgency]}`}>
                   EMI due {ordinal(loan.emiDueDay)} ({days < 0 ? `${Math.abs(days)}d overdue` : days === 0 ? "today" : `in ${days}d`})
                 </span>
+                <MakePaymentButton
+                  toType="loan"
+                  toId={loan.id}
+                  toLabel={loan.loanName}
+                  defaultAmount={loan.emiAmount ?? undefined}
+                  bankAccounts={bankAccounts}
+                  cards={cards}
+                />
                 <button onClick={() => setEditingId(loan.id)} className={ghostButtonClass}>
                   Edit
                 </button>

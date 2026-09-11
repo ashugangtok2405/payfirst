@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { deriveTransferCategory } from "@/lib/transactions";
+import { formatMoney } from "@/lib/format";
 import type { Prisma, Transaction } from "@prisma/client";
 
 async function requireUserId() {
@@ -19,6 +20,7 @@ function revalidateAll() {
   revalidatePath("/cards");
   revalidatePath("/loans");
   revalidatePath("/mutual-funds");
+  revalidatePath("/goals");
 }
 
 async function assertOwnedAccount(type: string, id: string, userId: string) {
@@ -43,6 +45,33 @@ async function assertOwnedAccount(type: string, id: string, userId: string) {
     return fund;
   }
   throw new Error("Invalid account type.");
+}
+
+type FundsCheckAccount = {
+  balance?: number;
+  accountName?: string;
+  creditLimit?: number;
+  currentBalance?: number;
+  cardName?: string;
+};
+
+// Only bank accounts and credit cards can be a transfer source, so only those
+// need a funds check - a bank can't overdraw, a card can't exceed its limit.
+// (Accepts `unknown` because the caller's account record is one of several
+// Prisma model types depending on `type`, which TS can't narrow automatically.)
+function assertSufficientFunds(type: string, accountRecord: unknown, amount: number) {
+  const account = accountRecord as FundsCheckAccount;
+  if (type === "bank") {
+    const available = account.balance ?? 0;
+    if (available < amount) {
+      throw new Error(`Insufficient funds — ${account.accountName} only has ${formatMoney(available)} available.`);
+    }
+  } else if (type === "card") {
+    const available = (account.creditLimit ?? 0) - (account.currentBalance ?? 0);
+    if (available < amount) {
+      throw new Error(`Insufficient credit limit — ${account.cardName} only has ${formatMoney(available)} available.`);
+    }
+  }
 }
 
 // Applies (or, given a negated amount, reverses) the balance effect of `amount`
@@ -83,6 +112,7 @@ type TransactionData = {
   fromAccountId: string | null;
   toAccountType: string | null;
   toAccountId: string | null;
+  goalId?: string | null;
 };
 
 async function buildEffect(
@@ -145,16 +175,19 @@ async function buildEffect(
     if (fromAccountType === toAccountType && fromAccountId === toAccountId) {
       throw new Error("Source and destination must be different.");
     }
-    if (fromAccountType === "card" && toAccountType !== "bank") {
-      throw new Error("A credit card cash advance can only go to a bank account.");
+
+    const fromAccount = await assertOwnedAccount(fromAccountType, fromAccountId, userId);
+    await assertOwnedAccount(toAccountType, toAccountId, userId);
+    assertSufficientFunds(fromAccountType, fromAccount, amount);
+    const category = String(formData.get("category") ?? "") || deriveTransferCategory(fromAccountType, toAccountType);
+
+    const data: TransactionData = { type, amount, date, note, category, fromAccountType, fromAccountId, toAccountType, toAccountId };
+    if (formData.has("goalId")) {
+      data.goalId = String(formData.get("goalId") ?? "") || null;
     }
 
-    await assertOwnedAccount(fromAccountType, fromAccountId, userId);
-    await assertOwnedAccount(toAccountType, toAccountId, userId);
-    const category = deriveTransferCategory(fromAccountType, toAccountType);
-
     return {
-      data: { type, amount, date, note, category, fromAccountType, fromAccountId, toAccountType, toAccountId },
+      data,
       ops: [
         moveDelta(fromAccountType, fromAccountId, amount, "source"),
         moveDelta(toAccountType, toAccountId, amount, "destination"),

@@ -1,13 +1,14 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import type { CreditCard } from "@prisma/client";
+import type { CreditCard, BankAccount } from "@prisma/client";
 import { createCreditCard, updateCreditCard, deleteCreditCard } from "./actions";
 import { TextField, primaryButtonClass, ghostButtonClass, dangerButtonClass } from "@/components/form";
 import { formatMoney, ordinal } from "@/lib/format";
 import { nextOccurrenceForDay, daysUntil, urgencyFromDays, urgencyStyles } from "@/lib/dueDates";
+import MakePaymentButton from "@/components/MakePaymentButton";
 
-export default function CardsManager({ cards }: { cards: CreditCard[] }) {
+export default function CardsManager({ cards, bankAccounts }: { cards: CreditCard[]; bankAccounts: BankAccount[] }) {
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -140,6 +141,14 @@ export default function CardsManager({ cards }: { cards: CreditCard[] }) {
                 <span className={`text-xs font-medium border rounded-full px-2.5 py-1 ${urgencyStyles[urgency]}`}>
                   Due {ordinal(card.dueDay)} ({days < 0 ? `${Math.abs(days)}d overdue` : days === 0 ? "today" : `in ${days}d`})
                 </span>
+                <MakePaymentButton
+                  toType="card"
+                  toId={card.id}
+                  toLabel={card.cardName}
+                  defaultAmount={card.minPayment ?? undefined}
+                  bankAccounts={bankAccounts}
+                  cards={cards}
+                />
                 <button onClick={() => setEditingId(card.id)} className={ghostButtonClass}>
                   Edit
                 </button>

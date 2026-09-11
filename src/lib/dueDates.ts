@@ -7,8 +7,29 @@
 // otherwise make "today" lag a calendar day behind India for part of each day.
 const APP_TIMEZONE = "Asia/Kolkata";
 
-function daysInMonth(year: number, month: number) {
+export function daysInMonth(year: number, month: number) {
   return new Date(year, month + 1, 0).getDate();
+}
+
+// Places a stored day-of-month (card due day, EMI day, SIP day) onto a specific
+// calendar month being viewed, clamped to that month's length - independent of
+// "today," unlike nextOccurrenceForDay which always looks forward from now.
+export function dateForDayInMonth(day: number, year: number, month: number): Date {
+  const clampedDay = Math.min(Math.max(day, 1), 31);
+  return new Date(year, month, Math.min(clampedDay, daysInMonth(year, month)));
+}
+
+export function parseMonthParam(monthParam: string | undefined, today: Date): { year: number; month: number } {
+  if (monthParam && /^\d{4}-\d{2}$/.test(monthParam)) {
+    const [year, month] = monthParam.split("-").map(Number);
+    return { year, month: month - 1 };
+  }
+  return { year: today.getFullYear(), month: today.getMonth() };
+}
+
+export function monthParamFor(year: number, month: number): string {
+  const normalized = new Date(year, month, 1);
+  return `${normalized.getFullYear()}-${String(normalized.getMonth() + 1).padStart(2, "0")}`;
 }
 
 export function todayInAppTimeZone(): Date {

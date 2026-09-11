@@ -4,10 +4,13 @@ import LoansManager from "./LoansManager";
 
 export default async function LoansPage() {
   const session = await auth();
-  const loans = await prisma.loan.findMany({
-    where: { userId: session!.user.id },
-    orderBy: { createdAt: "asc" },
-  });
+  const userId = session!.user.id;
 
-  return <LoansManager loans={loans} />;
+  const [loans, bankAccounts, cards] = await Promise.all([
+    prisma.loan.findMany({ where: { userId }, orderBy: { createdAt: "asc" } }),
+    prisma.bankAccount.findMany({ where: { userId }, orderBy: { createdAt: "asc" } }),
+    prisma.creditCard.findMany({ where: { userId }, orderBy: { createdAt: "asc" } }),
+  ]);
+
+  return <LoansManager loans={loans} bankAccounts={bankAccounts} cards={cards} />;
 }

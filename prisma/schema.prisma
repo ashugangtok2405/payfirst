@@ -27,6 +27,36 @@ model User {
   transactions      Transaction[]
   pushSubscriptions PushSubscription[]
   sentReminders     SentReminder[]
+  budgets           Budget[]
+  goals             Goal[]
+}
+
+model Goal {
+  id            String    @id @default(cuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name          String
+  targetAmount  Float
+  bankAccountId String
+  bankAccount   BankAccount @relation(fields: [bankAccountId], references: [id], onDelete: Cascade)
+  targetDate    DateTime?
+  notes         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  contributions Transaction[]
+}
+
+model Budget {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category  String
+  amount    Float
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, category])
 }
 
 model PushSubscription {
@@ -63,6 +93,8 @@ model BankAccount {
   notes         String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+
+  goals Goal[]
 }
 
 model CreditCard {
@@ -133,6 +165,8 @@ model Transaction {
   fromAccountId   String?
   toAccountType   String? // bank, card, loan, fund
   toAccountId     String?
+  goalId          String?
+  goal            Goal?    @relation(fields: [goalId], references: [id], onDelete: SetNull)
   createdAt       DateTime @default(now())
 }
 
