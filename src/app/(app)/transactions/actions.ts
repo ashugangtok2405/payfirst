@@ -216,8 +216,9 @@ export async function createTransaction(formData: FormData) {
   const userId = await requireUserId();
   const { data, ops } = await buildEffect(formData, userId);
 
-  await prisma.$transaction([prisma.transaction.create({ data: { ...data, userId } }), ...ops]);
+  const [created] = await prisma.$transaction([prisma.transaction.create({ data: { ...data, userId } }), ...ops]);
   revalidateAll();
+  return created as Transaction;
 }
 
 export async function updateTransaction(id: string, formData: FormData) {

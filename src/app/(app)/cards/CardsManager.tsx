@@ -1,26 +1,103 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import type { CreditCard, BankAccount } from "@prisma/client";
+import type { CreditCard, BankAccount, CreditCardStatement, CreditCardPayment, Transaction } from "@prisma/client";
 import { createCreditCard, updateCreditCard, deleteCreditCard } from "./actions";
+import { generateStatement, updateStatement } from "./statements";
 import { TextField, primaryButtonClass, ghostButtonClass, dangerButtonClass } from "@/components/form";
 import { formatMoney, ordinal } from "@/lib/format";
-import { nextOccurrenceForDay, daysUntil, urgencyFromDays, urgencyStyles } from "@/lib/dueDates";
-import MakePaymentButton from "@/components/MakePaymentButton";
+import { nextOccurrenceForDay, daysUntil, urgencyFromDays, urgencyStyles, todayInAppTimeZone } from "@/lib/dueDates";
+import { remainingDueOf, paidAmountOf, statementStatusOf, statementStatusStyles, statementStatusLabels } from "@/lib/creditCardStatements";
+import PayStatementButton from "./PayStatementButton";
+
+type StatementWithPayments = CreditCardStatement & { payments: (CreditCardPayment & { transaction: Transaction })[] };
+
+function toDateInputValue(date: Date) {
+  return new Date(date).toISOString().slice(0, 10);
+}
+
+function StatementEditForm({ statement, onDone }: { statement: StatementWithPayments; onDone: () => void }) {
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setError(null);
+    const formData = new FormData(e.currentTarget);
+    startTransition(async () => {
+      try {
+        await updateStatement(statement.id, formData);
+        onDone();
+      } catch {
+        setError("Could not update statement.");
+      }
+    });
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-3 bg-slate-50 rounded-lg">
+      <TextField label="Statement total (₹)" name="statementTotal" type="number" step="0.01" defaultValue={statement.statementTotal} />
+      <TextField label="Minimum due (₹)" name="minimumDue" type="number" step="0.01" defaultValue={statement.minimumDue} />
+      <TextField label="Due date" name="dueDate" type="date" defaultValue={toDateInputValue(statement.dueDate)} />
+      <div className="flex items-end gap-2">
+        <button type="submit" disabled={pending} className={primaryButtonClass}>
+          Save
+        </button>
+        <button type="button" onClick={onDone} className={ghostButtonClass}>
+          Cancel
+        </button>
+      </div>
+      {error && <p className="text-xs text-red-600 col-span-full">{error}</p>}
+    </form>
+  );
+}
+
+function StatementRow({ statement, today }: { statement: StatementWithPayments; today: Date }) {
+  const [editing, setEditing] = useState(false);
+  const remaining = remainingDueOf(statement);
+  const paid = paidAmountOf(statement);
+  const status = statementStatusOf(statement, today);
+  const periodLabel = `${statement.periodStart.toLocaleDateString("en-IN", { day: "numeric", month: "short" })} – ${statement.periodEnd.toLocaleDateString("en-IN", { day: "numeric", month: "short" })}`;
+
+  if (editing) return <StatementEditForm statement={statement} onDone={() => setEditing(false)} />;
+
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 p-3 text-sm">
+      <div>
+        <p className="font-medium text-slate-900">{periodLabel}</p>
+        <p className="text-xs text-slate-500">
+          Statement {formatMoney(statement.statementTotal)} · Min due {formatMoney(statement.minimumDue)} · Paid {formatMoney(paid)} · Remaining {formatMoney(remaining)}
+        </p>
+        <p className="text-xs text-slate-400">Due {statement.dueDate.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</p>
+      </div>
+      <div className="flex items-center gap-2">
+        <span className={`text-xs font-medium border rounded-full px-2.5 py-1 ${statementStatusStyles[status]}`}>{statementStatusLabels[status]}</span>
+        <button onClick={() => setEditing(true)} className={ghostButtonClass}>
+          Edit
+        </button>
+      </div>
+    </div>
+  );
+}
 
 export default function CardsManager({
   cards,
   bankAccounts,
   paidByCard,
+  statementsByCard,
 }: {
   cards: CreditCard[];
   bankAccounts: BankAccount[];
   paidByCard: Record<string, boolean>;
+  statementsByCard: Record<string, StatementWithPayments[]>;
 }) {
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+
+  const today = todayInAppTimeZone();
 
   function handleCreate(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -54,6 +131,26 @@ export default function CardsManager({
     if (!confirm(`Delete "${name}"? This cannot be undone.`)) return;
     startTransition(async () => {
       await deleteCreditCard(id);
+    });
+  }
+
+  function handleGenerateStatement(cardId: string) {
+    setError(null);
+    startTransition(async () => {
+      try {
+        await generateStatement(cardId);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Could not generate statement.");
+      }
+    });
+  }
+
+  function toggleExpanded(cardId: string) {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(cardId)) next.delete(cardId);
+      else next.add(cardId);
+      return next;
     });
   }
 
@@ -105,6 +202,16 @@ export default function CardsManager({
           const days = daysUntil(nextDue);
           const urgency = urgencyFromDays(days);
           const utilization = card.creditLimit > 0 ? Math.round((card.currentBalance / card.creditLimit) * 100) : 0;
+          const availableCredit = card.creditLimit - card.currentBalance;
+
+          const statements = statementsByCard[card.id] ?? [];
+          const latestStatement = statements[0];
+          const unpaidStatements = statements.filter((s) => remainingDueOf(s) > 0);
+          const statementOptions = unpaidStatements.map((s) => ({
+            id: s.id,
+            label: s.periodEnd.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }),
+            remainingDue: remainingDueOf(s),
+          }));
 
           return editingId === card.id ? (
             <form
@@ -132,44 +239,79 @@ export default function CardsManager({
               </div>
             </form>
           ) : (
-            <div key={card.id} className="p-4 sm:p-5 flex flex-wrap items-center justify-between gap-4">
-              <div>
-                <p className="font-medium text-slate-900">
-                  {card.cardName}{" "}
-                  <span className="text-slate-400 font-normal text-sm">
-                    · {card.bankName}
-                    {card.last4 ? ` ••${card.last4}` : ""}
-                  </span>
-                </p>
-                <p className="text-xs text-slate-500">
-                  {formatMoney(card.currentBalance)} of {formatMoney(card.creditLimit)} used ({utilization}%) · Statement on {ordinal(card.statementDay)}
-                </p>
+            <div key={card.id} className="p-4 sm:p-5">
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div>
+                  <p className="font-medium text-slate-900">
+                    {card.cardName}{" "}
+                    <span className="text-slate-400 font-normal text-sm">
+                      · {card.bankName}
+                      {card.last4 ? ` ••${card.last4}` : ""}
+                    </span>
+                  </p>
+                  <p className="text-xs text-slate-500">
+                    Outstanding {formatMoney(card.currentBalance)} of {formatMoney(card.creditLimit)} ({utilization}%) · Available{" "}
+                    {formatMoney(availableCredit)} · Statement on {ordinal(card.statementDay)}
+                  </p>
+                  {latestStatement ? (
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Latest statement {formatMoney(latestStatement.statementTotal)} · Remaining due{" "}
+                      {formatMoney(remainingDueOf(latestStatement))} · Min due {formatMoney(latestStatement.minimumDue)} · Due{" "}
+                      {latestStatement.dueDate.toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
+                    </p>
+                  ) : (
+                    <p className="text-xs text-slate-400 mt-0.5">No statement generated yet</p>
+                  )}
+                </div>
+                <div className="flex items-center gap-3">
+                  {latestStatement ? (
+                    <span
+                      className={`text-xs font-medium border rounded-full px-2.5 py-1 ${statementStatusStyles[statementStatusOf(latestStatement, today)]}`}
+                    >
+                      {statementStatusLabels[statementStatusOf(latestStatement, today)]}
+                    </span>
+                  ) : paidByCard[card.id] ? (
+                    <span className="text-xs font-medium border rounded-full px-2.5 py-1 bg-emerald-50 text-emerald-700 border-emerald-200">
+                      Paid for this cycle
+                    </span>
+                  ) : (
+                    <span className={`text-xs font-medium border rounded-full px-2.5 py-1 ${urgencyStyles[urgency]}`}>
+                      Due {ordinal(card.dueDay)} ({days < 0 ? `${Math.abs(days)}d overdue` : days === 0 ? "today" : `in ${days}d`})
+                    </span>
+                  )}
+                  <button onClick={() => handleGenerateStatement(card.id)} disabled={pending} className={ghostButtonClass}>
+                    Generate statement
+                  </button>
+                  <PayStatementButton
+                    cardId={card.id}
+                    cardLabel={card.cardName}
+                    statementOptions={statementOptions}
+                    bankAccounts={bankAccounts}
+                    cards={cards}
+                  />
+                  <button onClick={() => setEditingId(card.id)} className={ghostButtonClass}>
+                    Edit
+                  </button>
+                  <button onClick={() => handleDelete(card.id, card.cardName)} className={dangerButtonClass}>
+                    Delete
+                  </button>
+                </div>
               </div>
-              <div className="flex items-center gap-3">
-                {paidByCard[card.id] ? (
-                  <span className="text-xs font-medium border rounded-full px-2.5 py-1 bg-emerald-50 text-emerald-700 border-emerald-200">
-                    Paid for this cycle
-                  </span>
-                ) : (
-                  <span className={`text-xs font-medium border rounded-full px-2.5 py-1 ${urgencyStyles[urgency]}`}>
-                    Due {ordinal(card.dueDay)} ({days < 0 ? `${Math.abs(days)}d overdue` : days === 0 ? "today" : `in ${days}d`})
-                  </span>
-                )}
-                <MakePaymentButton
-                  toType="card"
-                  toId={card.id}
-                  toLabel={card.cardName}
-                  defaultAmount={card.minPayment ?? undefined}
-                  bankAccounts={bankAccounts}
-                  cards={cards}
-                />
-                <button onClick={() => setEditingId(card.id)} className={ghostButtonClass}>
-                  Edit
-                </button>
-                <button onClick={() => handleDelete(card.id, card.cardName)} className={dangerButtonClass}>
-                  Delete
-                </button>
-              </div>
+
+              {statements.length > 0 && (
+                <div className="mt-3">
+                  <button onClick={() => toggleExpanded(card.id)} className="text-xs font-medium text-slate-500 hover:text-slate-900 underline">
+                    {expanded.has(card.id) ? "Hide" : "View"} statement history ({statements.length})
+                  </button>
+                  {expanded.has(card.id) && (
+                    <div className="mt-2 border border-slate-200 rounded-lg divide-y divide-slate-100">
+                      {statements.map((s) => (
+                        <StatementRow key={s.id} statement={s} today={today} />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           );
         })}

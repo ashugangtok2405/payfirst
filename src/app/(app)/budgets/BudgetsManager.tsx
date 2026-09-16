@@ -10,7 +10,7 @@ type Row = { category: string; budget: number | null; spent: number };
 
 function BudgetRow({ row, editable }: { row: Row; editable: boolean }) {
   const [amount, setAmount] = useState(row.budget ?? 0);
-  const [pending, startTransition] = useTransition();
+  const [, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
   const hasBudget = row.budget != null && row.budget > 0;
@@ -19,12 +19,11 @@ function BudgetRow({ row, editable }: { row: Row; editable: boolean }) {
 
   const barColor = !hasBudget ? "bg-slate-300" : over ? "bg-red-500" : pct >= 70 ? "bg-amber-500" : "bg-emerald-500";
 
-  function save(next: number) {
-    setAmount(next);
+  function save() {
     setError(null);
     startTransition(async () => {
       try {
-        await setBudget(row.category, next);
+        await setBudget(row.category, amount);
       } catch {
         setError("Could not save budget.");
       }
@@ -56,8 +55,11 @@ function BudgetRow({ row, editable }: { row: Row; editable: boolean }) {
               step="1"
               value={amount || ""}
               placeholder="none"
-              onChange={(e) => save(Number(e.target.value))}
-              disabled={pending}
+              onChange={(e) => setAmount(Number(e.target.value))}
+              onBlur={save}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") e.currentTarget.blur();
+              }}
               className="w-24 rounded-lg border border-slate-300 bg-white px-2 py-1 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900"
             />
             / month

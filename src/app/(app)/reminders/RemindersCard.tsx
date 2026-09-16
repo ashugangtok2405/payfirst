@@ -85,10 +85,9 @@ export default function RemindersCard({ reminderDaysBefore }: { reminderDaysBefo
     }
   }
 
-  async function saveDays(next: number) {
-    setDays(next);
+  async function saveDays() {
     try {
-      await updateReminderDays(next);
+      await updateReminderDays(days);
     } catch {
       setError("Could not save reminder setting.");
     }
@@ -114,7 +113,11 @@ export default function RemindersCard({ reminderDaysBefore }: { reminderDaysBefo
             min={0}
             max={30}
             value={days}
-            onChange={(e) => saveDays(Number(e.target.value))}
+            onChange={(e) => setDays(Number(e.target.value))}
+            onBlur={saveDays}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") e.currentTarget.blur();
+            }}
             className="w-16 rounded-lg border border-slate-300 bg-white px-2 py-1 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900"
           />
           day(s) before
