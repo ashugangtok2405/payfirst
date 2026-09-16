@@ -73,6 +73,16 @@ export function nextOccurrenceForDay(day: number, today: Date = todayInAppTimeZo
   return new Date(y, m + 1, nextMonthDay);
 }
 
+// The occurrence immediately before nextOccurrenceForDay's result - used to
+// bound "this billing cycle" as (previous due date, next due date].
+export function previousOccurrenceForDay(day: number, today: Date = todayInAppTimeZone()): Date {
+  const next = nextOccurrenceForDay(day, today);
+  const y = next.getFullYear();
+  const m = next.getMonth() - 1;
+  const clampedDay = Math.min(Math.max(day, 1), 31);
+  return new Date(y, m, Math.min(clampedDay, daysInMonth(y, m)));
+}
+
 export function daysUntil(date: Date, today: Date = todayInAppTimeZone()): number {
   const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
   const target = new Date(date.getFullYear(), date.getMonth(), date.getDate());

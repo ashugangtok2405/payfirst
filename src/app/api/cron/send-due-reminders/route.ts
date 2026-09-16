@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { todayInAppTimeZone, nextOccurrenceForDay, daysUntil, formatDateKey } from "@/lib/dueDates";
+import { todayInAppTimeZone, nextOccurrenceForDay, previousOccurrenceForDay, daysUntil, formatDateKey } from "@/lib/dueDates";
 import webpush from "web-push";
 
 webpush.setVapidDetails(
@@ -29,6 +29,10 @@ export async function GET(request: Request) {
       mutualFunds: true,
       debts: { where: { settled: false } },
       pushSubscriptions: true,
+      transactions: {
+        where: { type: "transfer", toAccountType: { in: ["card", "loan"] } },
+        select: { toAccountType: true, toAccountId: true, date: true },
+      },
     },
   });
 
@@ -39,7 +43,16 @@ export async function GET(request: Request) {
 
     const items: DueItem[] = [];
 
+    function paidThisCycle(type: "card" | "loan", id: string, dueDay: number) {
+      const cycleEnd = nextOccurrenceForDay(dueDay, today);
+      const cycleStart = previousOccurrenceForDay(dueDay, today);
+      return user.transactions.some(
+        (t) => t.toAccountType === type && t.toAccountId === id && t.date > cycleStart && t.date <= cycleEnd
+      );
+    }
+
     for (const card of user.creditCards) {
+      if (paidThisCycle("card", card.id, card.dueDay)) continue;
       const dueDate = nextOccurrenceForDay(card.dueDay, today);
       items.push({
         key: `card:${card.id}:${formatDateKey(dueDate)}`,
@@ -51,6 +64,7 @@ export async function GET(request: Request) {
     }
 
     for (const loan of user.loans) {
+      if (paidThisCycle("loan", loan.id, loan.emiDueDay)) continue;
       const dueDate = nextOccurrenceForDay(loan.emiDueDay, today);
       items.push({
         key: `loan:${loan.id}:${formatDateKey(dueDate)}`,

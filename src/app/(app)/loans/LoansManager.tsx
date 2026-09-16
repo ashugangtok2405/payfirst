@@ -26,10 +26,12 @@ export default function LoansManager({
   loans,
   bankAccounts,
   cards,
+  paidByLoan,
 }: {
   loans: Loan[];
   bankAccounts: BankAccount[];
   cards: CreditCard[];
+  paidByLoan: Record<string, boolean>;
 }) {
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -159,9 +161,15 @@ export default function LoansManager({
                 </p>
               </div>
               <div className="flex items-center gap-3">
-                <span className={`text-xs font-medium border rounded-full px-2.5 py-1 ${urgencyStyles[urgency]}`}>
-                  EMI due {ordinal(loan.emiDueDay)} ({days < 0 ? `${Math.abs(days)}d overdue` : days === 0 ? "today" : `in ${days}d`})
-                </span>
+                {paidByLoan[loan.id] ? (
+                  <span className="text-xs font-medium border rounded-full px-2.5 py-1 bg-emerald-50 text-emerald-700 border-emerald-200">
+                    Paid for this cycle
+                  </span>
+                ) : (
+                  <span className={`text-xs font-medium border rounded-full px-2.5 py-1 ${urgencyStyles[urgency]}`}>
+                    EMI due {ordinal(loan.emiDueDay)} ({days < 0 ? `${Math.abs(days)}d overdue` : days === 0 ? "today" : `in ${days}d`})
+                  </span>
+                )}
                 <MakePaymentButton
                   toType="loan"
                   toId={loan.id}

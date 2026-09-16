@@ -2,7 +2,15 @@ import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { formatMoney } from "@/lib/format";
-import { nextOccurrenceForDay, daysUntil, urgencyFromDays, urgencyStyles, urgencyLabels, type Urgency } from "@/lib/dueDates";
+import {
+  nextOccurrenceForDay,
+  previousOccurrenceForDay,
+  daysUntil,
+  urgencyFromDays,
+  urgencyStyles,
+  urgencyLabels,
+  type Urgency,
+} from "@/lib/dueDates";
 import RemindersCard from "../reminders/RemindersCard";
 
 type DueItem = {
@@ -20,18 +28,29 @@ export default async function DashboardPage() {
   const session = await auth();
   const userId = session!.user.id;
 
-  const [accounts, cards, loans, funds, debts, user] = await Promise.all([
+  const [accounts, cards, loans, funds, debts, user, payments] = await Promise.all([
     prisma.bankAccount.findMany({ where: { userId } }),
     prisma.creditCard.findMany({ where: { userId } }),
     prisma.loan.findMany({ where: { userId } }),
     prisma.mutualFund.findMany({ where: { userId } }),
     prisma.debt.findMany({ where: { userId, settled: false } }),
     prisma.user.findUnique({ where: { id: userId }, select: { reminderDaysBefore: true } }),
+    prisma.transaction.findMany({
+      where: { userId, type: "transfer", toAccountType: { in: ["card", "loan"] } },
+      select: { toAccountType: true, toAccountId: true, date: true },
+    }),
   ]);
+
+  function paidThisCycle(type: "card" | "loan", id: string, dueDay: number) {
+    const cycleEnd = nextOccurrenceForDay(dueDay);
+    const cycleStart = previousOccurrenceForDay(dueDay);
+    return payments.some((p) => p.toAccountType === type && p.toAccountId === id && p.date > cycleStart && p.date <= cycleEnd);
+  }
 
   const dueItems: DueItem[] = [];
 
   for (const card of cards) {
+    if (paidThisCycle("card", card.id, card.dueDay)) continue;
     const dueDate = nextOccurrenceForDay(card.dueDay);
     const days = daysUntil(dueDate);
     dueItems.push({
@@ -47,6 +66,7 @@ export default async function DashboardPage() {
   }
 
   for (const loan of loans) {
+    if (paidThisCycle("loan", loan.id, loan.emiDueDay)) continue;
     const dueDate = nextOccurrenceForDay(loan.emiDueDay);
     const days = daysUntil(dueDate);
     dueItems.push({

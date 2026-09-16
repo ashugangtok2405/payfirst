@@ -83,11 +83,22 @@ function TransactionFields({
   txn?: Transaction;
 }) {
   const fromOptions = [
-    ...bankAccounts.map((a) => ({ value: `bank:${a.id}`, label: `Bank Account · ${a.accountName}` })),
+    ...bankAccounts.map((a) => ({ value: `bank:${a.id}`, label: `Bank Account · ${a.accountName} (${a.bankName})` })),
     ...cards.map((c) => ({ value: `card:${c.id}`, label: `Credit Card · ${c.cardName}` })),
   ];
 
-  const bankAccountDefault = type === "expense" ? txn?.fromAccountId ?? undefined : txn?.toAccountId ?? undefined;
+  const accountOptions = [
+    ...bankAccounts.map((a) => ({ value: `bank:${a.id}`, label: `${a.accountName} (${a.bankName})` })),
+    ...cards.map((c) => ({ value: `card:${c.id}`, label: `${c.cardName} (${c.bankName})` })),
+  ];
+  const accountDefault =
+    type === "expense"
+      ? txn?.fromAccountType && txn?.fromAccountId
+        ? `${txn.fromAccountType}:${txn.fromAccountId}`
+        : undefined
+      : txn?.toAccountType && txn?.toAccountId
+        ? `${txn.toAccountType}:${txn.toAccountId}`
+        : undefined;
 
   const initialFrom =
     txn?.type === "transfer" && txn.fromAccountType && txn.fromAccountId
@@ -100,7 +111,7 @@ function TransactionFields({
     ...cards.map((c) => ({ value: `card:${c.id}`, label: `Credit Card · ${c.cardName}` })),
     ...loans.map((l) => ({ value: `loan:${l.id}`, label: `Loan · ${l.loanName}` })),
     ...funds.map((f) => ({ value: `fund:${f.id}`, label: `Mutual Fund · ${f.fundName}` })),
-    ...bankAccounts.map((a) => ({ value: `bank:${a.id}`, label: `Bank Account · ${a.accountName}` })),
+    ...bankAccounts.map((a) => ({ value: `bank:${a.id}`, label: `Bank Account · ${a.accountName} (${a.bankName})` })),
   ].filter((opt) => opt.value !== fromValue);
 
   const toDefault = txn?.toAccountType && txn?.toAccountId ? `${txn.toAccountType}:${txn.toAccountId}` : undefined;
@@ -126,9 +137,9 @@ function TransactionFields({
           <>
             <SelectField
               label={type === "expense" ? "Pay from" : "Deposit to"}
-              name="bankAccountId"
-              defaultValue={bankAccountDefault}
-              options={bankAccounts.map((a) => ({ value: a.id, label: `${a.accountName} (${a.bankName})` }))}
+              name="account"
+              defaultValue={accountDefault}
+              options={accountOptions}
             />
             <CategoryField categories={type === "expense" ? expenseCategories : incomeCategories} defaultValue={txn?.category} />
           </>
@@ -211,10 +222,10 @@ export default function TransactionsManager({
 
   function describe(txn: Transaction) {
     if (txn.type === "expense") {
-      return `${txn.category ?? "Expense"} · ${accountLabel.get(`bank-${txn.fromAccountId}`) ?? "Bank"}`;
+      return `${txn.category ?? "Expense"} · ${accountLabel.get(`${txn.fromAccountType}-${txn.fromAccountId}`) ?? "Account"}`;
     }
     if (txn.type === "income") {
-      return `${txn.category ?? "Income"} · ${accountLabel.get(`bank-${txn.toAccountId}`) ?? "Bank"}`;
+      return `${txn.category ?? "Income"} · ${accountLabel.get(`${txn.toAccountType}-${txn.toAccountId}`) ?? "Account"}`;
     }
     const from = accountLabel.get(`${txn.fromAccountType}-${txn.fromAccountId}`) ?? "?";
     const to = accountLabel.get(`${txn.toAccountType}-${txn.toAccountId}`) ?? "?";

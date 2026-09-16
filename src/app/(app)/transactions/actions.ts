@@ -128,9 +128,11 @@ async function buildEffect(
   if (!(amount > 0)) throw new Error("Amount must be greater than zero.");
 
   if (type === "expense") {
-    const bankAccountId = String(formData.get("bankAccountId") ?? "");
+    const [accountType, accountId] = String(formData.get("account") ?? "").split(":");
+    if (accountType !== "bank" && accountType !== "card") throw new Error("Choose a bank account or credit card.");
     const category = String(formData.get("category") ?? "Other");
-    await assertOwnedAccount("bank", bankAccountId, userId);
+    const account = await assertOwnedAccount(accountType, accountId, userId);
+    assertSufficientFunds(accountType, account, amount);
     return {
       data: {
         type,
@@ -138,19 +140,20 @@ async function buildEffect(
         date,
         note,
         category,
-        fromAccountType: "bank",
-        fromAccountId: bankAccountId,
+        fromAccountType: accountType,
+        fromAccountId: accountId,
         toAccountType: null,
         toAccountId: null,
       },
-      ops: [moveDelta("bank", bankAccountId, amount, "source")],
+      ops: [moveDelta(accountType, accountId, amount, "source")],
     };
   }
 
   if (type === "income") {
-    const bankAccountId = String(formData.get("bankAccountId") ?? "");
+    const [accountType, accountId] = String(formData.get("account") ?? "").split(":");
+    if (accountType !== "bank" && accountType !== "card") throw new Error("Choose a bank account or credit card.");
     const category = String(formData.get("category") ?? "Other");
-    await assertOwnedAccount("bank", bankAccountId, userId);
+    await assertOwnedAccount(accountType, accountId, userId);
     return {
       data: {
         type,
@@ -160,10 +163,10 @@ async function buildEffect(
         category,
         fromAccountType: null,
         fromAccountId: null,
-        toAccountType: "bank",
-        toAccountId: bankAccountId,
+        toAccountType: accountType,
+        toAccountId: accountId,
       },
-      ops: [moveDelta("bank", bankAccountId, amount, "destination")],
+      ops: [moveDelta(accountType, accountId, amount, "destination")],
     };
   }
 
