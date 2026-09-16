@@ -1,5 +1,10 @@
-import { auth } from "@/lib/auth";
+import NextAuth from "next-auth";
 import { NextResponse } from "next/server";
+import { authConfig } from "@/lib/auth.config";
+
+// Uses the lightweight, provider-free config (no bcrypt/Prisma) so this Edge
+// Function's bundle stays under Vercel's size limit - see auth.config.ts.
+const { auth } = NextAuth(authConfig);
 
 const PUBLIC_PATHS = ["/login", "/register"];
 
