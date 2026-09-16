@@ -5,7 +5,9 @@ const PUBLIC_PATHS = ["/login", "/register"];
 
 export default auth((req) => {
   const isPublic = PUBLIC_PATHS.some((p) => req.nextUrl.pathname.startsWith(p));
-  const isApiAuth = req.nextUrl.pathname.startsWith("/api/auth");
+  // /api/auth is NextAuth's own routes; /api/cron is authenticated separately
+  // via a bearer secret (see route.ts) rather than a browser session.
+  const isApiAuth = req.nextUrl.pathname.startsWith("/api/auth") || req.nextUrl.pathname.startsWith("/api/cron");
 
   if (!req.auth && !isPublic && !isApiAuth) {
     const loginUrl = new URL("/login", req.nextUrl.origin);

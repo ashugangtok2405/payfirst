@@ -1,8 +1,7 @@
-import type { Config } from "@netlify/functions";
-import { PrismaClient } from "@prisma/client";
+import { NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+import { todayInAppTimeZone, nextOccurrenceForDay, daysUntil, formatDateKey } from "@/lib/dueDates";
 import webpush from "web-push";
-
-const prisma = new PrismaClient();
 
 webpush.setVapidDetails(
   process.env.VAPID_SUBJECT!,
@@ -10,62 +9,17 @@ webpush.setVapidDetails(
   process.env.VAPID_PRIVATE_KEY!
 );
 
-// This function runs on Netlify's infrastructure, which uses UTC - not the app's
-// India-based due dates. Anchor "today" to IST explicitly so a run at, say,
-// 1am IST (7:30pm UTC the previous day) doesn't compute one day behind.
-const APP_TIMEZONE = "Asia/Kolkata";
-
-function todayInAppTimeZone(): Date {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: APP_TIMEZONE,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(new Date());
-  const get = (type: string) => Number(parts.find((p) => p.type === type)!.value);
-  return new Date(get("year"), get("month") - 1, get("day"));
-}
-
-// YYYY-MM-DD from a calendar-day Date's local components - NOT toISOString(),
-// which converts through UTC and can shift the date by a day.
-function formatDateKey(date: Date): string {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
-
-function daysInMonth(year: number, month: number) {
-  return new Date(year, month + 1, 0).getDate();
-}
-
-function nextOccurrenceForDay(day: number, today: Date): Date {
-  const clampedDay = Math.min(Math.max(day, 1), 31);
-  const y = today.getFullYear();
-  const m = today.getMonth();
-
-  const thisMonthDay = Math.min(clampedDay, daysInMonth(y, m));
-  const thisMonth = new Date(y, m, thisMonthDay);
-  thisMonth.setHours(0, 0, 0, 0);
-
-  const todayStart = new Date(y, m, today.getDate());
-  todayStart.setHours(0, 0, 0, 0);
-
-  if (thisMonth.getTime() >= todayStart.getTime()) return thisMonth;
-
-  const nextMonthDay = Math.min(clampedDay, daysInMonth(y, m + 1));
-  return new Date(y, m + 1, nextMonthDay);
-}
-
-function daysUntil(date: Date, today: Date): number {
-  const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-  const target = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-  return Math.round((target.getTime() - todayStart.getTime()) / (1000 * 60 * 60 * 24));
-}
-
 type DueItem = { key: string; label: string; detail: string; dueDate: Date; days: number };
 
-export default async (req: Request) => {
+// Runs daily via Vercel Cron (see vercel.json). Vercel automatically sends
+// `Authorization: Bearer <CRON_SECRET>` for cron-triggered requests when the
+// CRON_SECRET env var is set, so this checks that to reject other callers.
+export async function GET(request: Request) {
+  const authHeader = request.headers.get("authorization");
+  if (process.env.CRON_SECRET && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+    return new NextResponse("Unauthorized", { status: 401 });
+  }
+
   const today = todayInAppTimeZone();
 
   const users = await prisma.user.findMany({
@@ -167,11 +121,5 @@ export default async (req: Request) => {
     }
   }
 
-  return new Response(JSON.stringify({ ok: true, sentCount }), {
-    headers: { "content-type": "application/json" },
-  });
-};
-
-export const config: Config = {
-  schedule: "30 2 * * *",
-};
+  return NextResponse.json({ ok: true, sentCount });
+}
