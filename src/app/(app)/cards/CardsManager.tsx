@@ -3,12 +3,13 @@
 import { useState, useTransition } from "react";
 import type { CreditCard, BankAccount, CreditCardStatement, CreditCardPayment, Transaction } from "@prisma/client";
 import { createCreditCard, updateCreditCard, deleteCreditCard } from "./actions";
-import { generateStatement, updateStatement } from "./statements";
+import { generateStatement, updateStatement, deleteStatement } from "./statements";
 import { TextField, primaryButtonClass, ghostButtonClass, dangerButtonClass } from "@/components/form";
 import { formatMoney, ordinal } from "@/lib/format";
-import { todayInAppTimeZone } from "@/lib/dueDates";
+import { todayInAppTimeZone, daysUntil, urgencyFromDays, urgencyStyles, urgencyLabels } from "@/lib/dueDates";
 import { remainingDueOf, paidAmountOf, statementStatusOf, statementStatusStyles, statementStatusLabels } from "@/lib/creditCardStatements";
-import PayStatementButton from "./PayStatementButton";
+import PayCardButton from "./PayCardButton";
+import SetDueDateButton from "./SetDueDateButton";
 
 type StatementWithPayments = CreditCardStatement & { payments: (CreditCardPayment & { transaction: Transaction })[] };
 
@@ -35,7 +36,7 @@ function StatementEditForm({ statement, onDone }: { statement: StatementWithPaym
   }
 
   return (
-    <form onSubmit={handleSubmit} className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-3 bg-white rounded-lg border border-slate-200">
+    <form onSubmit={handleSubmit} className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-3 bg-white rounded-xl border border-border">
       <TextField label="Statement total (₹)" name="statementTotal" type="number" step="0.01" defaultValue={statement.statementTotal} />
       <TextField label="Minimum due (₹)" name="minimumDue" type="number" step="0.01" defaultValue={statement.minimumDue} />
       <TextField label="Due date" name="dueDate" type="date" defaultValue={toDateInputValue(statement.dueDate)} />
@@ -47,13 +48,14 @@ function StatementEditForm({ statement, onDone }: { statement: StatementWithPaym
           Cancel
         </button>
       </div>
-      {error && <p className="text-xs text-red-600 col-span-full">{error}</p>}
+      {error && <p className="text-xs text-coral col-span-full">{error}</p>}
     </form>
   );
 }
 
 function StatementRow({ statement, today }: { statement: StatementWithPayments; today: Date }) {
   const [editing, setEditing] = useState(false);
+  const [pending, startTransition] = useTransition();
   const remaining = remainingDueOf(statement);
   const paid = paidAmountOf(statement);
   const status = statementStatusOf(statement, today);
@@ -61,26 +63,36 @@ function StatementRow({ statement, today }: { statement: StatementWithPayments; 
 
   if (editing) return <StatementEditForm statement={statement} onDone={() => setEditing(false)} />;
 
+  function handleDelete() {
+    if (!confirm(`Delete the ${periodLabel} statement? Any linked payments become unlinked, not deleted.`)) return;
+    startTransition(async () => {
+      await deleteStatement(statement.id);
+    });
+  }
+
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 p-3 text-sm bg-white rounded-lg border border-slate-200">
+    <div className="flex flex-wrap items-center justify-between gap-3 p-3 text-sm bg-white rounded-xl border border-border">
       <div>
-        <p className="font-medium text-slate-900">{periodLabel}</p>
-        <p className="text-xs text-slate-500">
+        <p className="font-medium text-ink">{periodLabel}</p>
+        <p className="text-xs text-muted">
           Statement {formatMoney(statement.statementTotal)} · Min due {formatMoney(statement.minimumDue)} · Paid {formatMoney(paid)} · Remaining {formatMoney(remaining)}
         </p>
-        <p className="text-xs text-slate-400">Due {statement.dueDate.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</p>
+        <p className="text-xs text-muted">Due {statement.dueDate.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</p>
       </div>
       <div className="flex items-center gap-2">
         <span className={`text-xs font-medium border rounded-full px-2.5 py-1 ${statementStatusStyles[status]}`}>{statementStatusLabels[status]}</span>
         <button onClick={() => setEditing(true)} className={ghostButtonClass}>
           Edit
         </button>
+        <button onClick={handleDelete} disabled={pending} className={dangerButtonClass}>
+          Delete
+        </button>
       </div>
     </div>
   );
 }
 
-const neutralPillClass = "bg-slate-100 text-slate-500 border-slate-200";
+const neutralPillClass = "bg-bg text-muted border-border";
 
 function CardRow({
   card,
@@ -112,6 +124,7 @@ function CardRow({
   pending: boolean;
 }) {
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const [genPending, startGenTransition] = useTransition();
   const [genError, setGenError] = useState<string | null>(null);
 
@@ -120,13 +133,6 @@ function CardRow({
   const unbilled = card.currentBalance - billed;
   const utilization = card.creditLimit > 0 ? Math.round((card.currentBalance / card.creditLimit) * 100) : 0;
   const availableCredit = card.creditLimit - card.currentBalance;
-
-  const unpaidStatements = statements.filter((s) => remainingDueOf(s) > 0);
-  const statementOptions = unpaidStatements.map((s) => ({
-    id: s.id,
-    label: s.periodEnd.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }),
-    remainingDue: remainingDueOf(s),
-  }));
 
   function handleGenerate() {
     setGenError(null);
@@ -139,41 +145,41 @@ function CardRow({
     });
   }
 
-  const status = latestStatement ? statementStatusOf(latestStatement, today) : null;
+  const days = card.nextDueDate ? daysUntil(card.nextDueDate, today) : null;
+  const urgency = days != null ? urgencyFromDays(days) : null;
+  const statementStatus = latestStatement ? statementStatusOf(latestStatement, today) : null;
 
   return (
-    <div>
-      <button
-        onClick={onToggle}
-        className="w-full flex items-center justify-between gap-4 px-4 sm:px-5 py-3.5 text-left hover:bg-slate-50"
-      >
-        <div>
-          <p className="font-medium text-slate-900 text-sm">
-            {card.cardName} <span className="text-slate-400 font-normal">· {card.bankName}{card.last4 ? ` ••${card.last4}` : ""}</span>
-          </p>
-          <p className="text-sm text-slate-500 mt-0.5 tabular-nums">{formatMoney(card.currentBalance)} outstanding</p>
-        </div>
-        <div className="flex items-center gap-3 shrink-0">
-          <span
-            className={`text-xs font-medium border rounded-full px-2.5 py-1 whitespace-nowrap ${
-              status ? statementStatusStyles[status] : neutralPillClass
-            }`}
-          >
-            {status ? statementStatusLabels[status] : "No statement yet"}
-          </span>
-          <svg
-            className={`w-4 h-4 text-slate-400 transition-transform ${expanded ? "rotate-180" : ""}`}
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-          </svg>
+    <div className="bg-white rounded-2xl shadow-card overflow-hidden">
+      <button onClick={onToggle} className="w-full px-4 sm:px-5 py-3.5 text-left hover:bg-bg">
+        <p className="font-medium text-ink text-sm truncate">
+          {card.cardName} · {card.bankName}
+          {card.last4 ? ` ••${card.last4}` : ""}
+        </p>
+        <div className="flex items-center justify-between gap-3 mt-1">
+          <p className="text-sm text-muted tabular-nums">{formatMoney(card.currentBalance)} outstanding</p>
+          <div className="flex items-center gap-3 shrink-0">
+            {urgency ? (
+              <span className={`text-xs font-medium border rounded-full px-2.5 py-1 whitespace-nowrap ${urgencyStyles[urgency]}`}>
+                {urgency === "later" ? card.nextDueDate!.toLocaleDateString("en-IN", { day: "numeric", month: "short" }) : urgencyLabels[urgency]}
+              </span>
+            ) : (
+              <span className={`text-xs font-medium border rounded-full px-2.5 py-1 whitespace-nowrap ${neutralPillClass}`}>No date set</span>
+            )}
+            <svg
+              className={`w-4 h-4 text-muted transition-transform ${expanded ? "rotate-180" : ""}`}
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </div>
         </div>
       </button>
 
       {expanded && (
-        <div className="px-4 sm:px-5 pb-5 bg-slate-50 border-t border-slate-100">
+        <div className="px-4 sm:px-5 pb-5 bg-bg border-t border-border">
           {editing ? (
             <form onSubmit={onSaveEdit} className="pt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
               <TextField label="Card name" name="cardName" required defaultValue={card.cardName} />
@@ -197,80 +203,85 @@ function CardRow({
             </form>
           ) : (
             <div className="pt-4 space-y-4">
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-muted">
                 Credit limit {formatMoney(card.creditLimit)} · Available {formatMoney(availableCredit)} ({utilization}% used) · Statement on{" "}
                 {ordinal(card.statementDay)} · Due on {ordinal(card.dueDay)}
               </p>
 
               <div className="grid grid-cols-3 gap-3 text-sm">
-                <div className="bg-white rounded-lg border border-slate-200 px-3 py-2.5">
-                  <p className="text-xs text-slate-400">Billed (this statement)</p>
-                  <p className="font-medium text-slate-900 tabular-nums mt-0.5">{formatMoney(billed)}</p>
+                <div className="bg-white rounded-xl border border-border px-3 py-2.5">
+                  <p className="text-xs text-muted">Billed (this statement)</p>
+                  <p className="font-medium text-ink tabular-nums mt-0.5">{formatMoney(billed)}</p>
                 </div>
-                <div className="bg-white rounded-lg border border-slate-200 px-3 py-2.5">
-                  <p className="text-xs text-slate-400">+ Unbilled since</p>
-                  <p className="font-medium text-slate-900 tabular-nums mt-0.5">{formatMoney(unbilled)}</p>
+                <div className="bg-white rounded-xl border border-border px-3 py-2.5">
+                  <p className="text-xs text-muted">+ Unbilled since</p>
+                  <p className="font-medium text-ink tabular-nums mt-0.5">{formatMoney(unbilled)}</p>
                 </div>
-                <div className="bg-slate-900 rounded-lg px-3 py-2.5">
-                  <p className="text-xs text-slate-300">= Total outstanding</p>
+                <div className="bg-accent rounded-xl px-3 py-2.5">
+                  <p className="text-xs text-white/70">= Total outstanding</p>
                   <p className="font-medium text-white tabular-nums mt-0.5">{formatMoney(card.currentBalance)}</p>
                 </div>
               </div>
 
-              {latestStatement ? (
-                <div className="flex flex-wrap items-center justify-between gap-3 bg-white rounded-lg border border-slate-200 px-3 py-2.5 text-sm">
-                  <div>
-                    <p className="font-medium text-slate-900">
-                      Statement of {latestStatement.periodEnd.toLocaleDateString("en-IN", { day: "numeric", month: "short" })} —{" "}
-                      {formatMoney(latestStatement.statementTotal)}
+              <div className="flex flex-wrap items-center justify-between gap-3 bg-white rounded-xl border border-border px-3 py-2.5 text-sm">
+                <div>
+                  <p className="font-medium text-ink">
+                    {card.nextDueDate
+                      ? `Next payment due ${card.nextDueDate.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}`
+                      : "No payment date set"}
+                  </p>
+                  {urgency && (
+                    <p className="text-xs text-muted mt-0.5">
+                      {days! < 0 ? `${Math.abs(days!)}d overdue` : days === 0 ? "Due today" : `In ${days}d`}
                     </p>
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      Min due {formatMoney(latestStatement.minimumDue)} · Remaining {formatMoney(remainingDueOf(latestStatement))} · Due{" "}
-                      {latestStatement.dueDate.toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
-                    </p>
-                  </div>
-                  <PayStatementButton
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <SetDueDateButton cardId={card.id} cardLabel={card.cardName} currentDueDate={card.nextDueDate} />
+                  <PayCardButton
                     cardId={card.id}
                     cardLabel={card.cardName}
-                    statementOptions={statementOptions}
+                    defaultAmount={card.currentBalance}
                     bankAccounts={bankAccounts}
                     cards={cards}
                   />
                 </div>
-              ) : (
-                <div className="flex flex-wrap items-center justify-between gap-3 bg-white rounded-lg border border-slate-200 px-3 py-2.5 text-sm">
-                  <p className="text-slate-600">All {formatMoney(card.currentBalance)} is unbilled. Generate a statement to start tracking bills for this card.</p>
-                  <button onClick={handleGenerate} disabled={genPending} className={primaryButtonClass}>
-                    {genPending ? "Generating…" : "Generate statement"}
-                  </button>
-                </div>
-              )}
-              {genError && <p className="text-xs text-red-600">{genError}</p>}
+              </div>
 
               <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs">
-                {latestStatement && (
-                  <button onClick={handleGenerate} disabled={genPending} className="font-medium text-slate-500 hover:text-slate-900 underline">
-                    {genPending ? "Generating…" : "Generate new statement"}
-                  </button>
-                )}
-                {statements.length > 0 && (
-                  <button onClick={() => setHistoryOpen((v) => !v)} className="font-medium text-slate-500 hover:text-slate-900 underline">
-                    {historyOpen ? "Hide" : "View"} statement history ({statements.length})
-                  </button>
-                )}
-                <button onClick={onStartEdit} className="font-medium text-slate-500 hover:text-slate-900 underline">
+                <button onClick={onStartEdit} className="font-medium text-muted hover:text-ink underline">
                   Edit card
                 </button>
-                <button onClick={onDelete} className="font-medium text-red-500 hover:text-red-700 underline">
+                <button onClick={onDelete} className="font-medium text-coral hover:text-coral underline">
                   Delete
+                </button>
+                <button onClick={() => setAdvancedOpen((v) => !v)} className="font-medium text-muted hover:text-ink underline ml-auto">
+                  {advancedOpen ? "Hide" : "Show"} statement tracking (advanced)
                 </button>
               </div>
 
-              {historyOpen && (
-                <div className="space-y-2">
-                  {statements.map((s) => (
-                    <StatementRow key={s.id} statement={s} today={today} />
-                  ))}
+              {advancedOpen && (
+                <div className="space-y-3 pt-1 border-t border-border">
+                  <p className="text-xs text-muted pt-3">
+                    Optional itemized billing based on logged transactions - {statementStatus ? statementStatusLabels[statementStatus] : "no statement yet"}
+                    {latestStatement && `, remaining ${formatMoney(remainingDueOf(latestStatement))}`}.
+                  </p>
+                  <button onClick={handleGenerate} disabled={genPending} className={ghostButtonClass}>
+                    {genPending ? "Generating…" : latestStatement ? "Generate new statement" : "Generate statement"}
+                  </button>
+                  {genError && <p className="text-xs text-coral">{genError}</p>}
+                  {statements.length > 0 && (
+                    <button onClick={() => setHistoryOpen((v) => !v)} className="block font-medium text-xs text-muted hover:text-ink underline">
+                      {historyOpen ? "Hide" : "View"} statement history ({statements.length})
+                    </button>
+                  )}
+                  {historyOpen && (
+                    <div className="space-y-2">
+                      {statements.map((s) => (
+                        <StatementRow key={s.id} statement={s} today={today} />
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -345,8 +356,8 @@ export default function CardsManager({
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-slate-900">Credit Cards</h1>
-          <p className="text-sm text-slate-500">
+          <h1 className="text-xl font-semibold text-ink">Credit Cards</h1>
+          <p className="text-sm text-muted">
             {cards.length} card{cards.length !== 1 ? "s" : ""} · Outstanding {formatMoney(totalOutstanding)} of {formatMoney(totalLimit)} limit
           </p>
         </div>
@@ -355,10 +366,10 @@ export default function CardsManager({
         </button>
       </div>
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="text-sm text-coral">{error}</p>}
 
       {adding && (
-        <form onSubmit={handleCreate} className="bg-white border border-slate-200 rounded-xl p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <form onSubmit={handleCreate} className="bg-white rounded-2xl shadow-card p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
           <TextField label="Card name" name="cardName" required placeholder="e.g. Regalia Gold" />
           <TextField label="Bank name" name="bankName" required placeholder="e.g. HDFC Bank" />
           <TextField label="Last 4 digits" name="last4" placeholder="1234" />
@@ -377,9 +388,9 @@ export default function CardsManager({
         </form>
       )}
 
-      <div className="bg-white border border-slate-200 rounded-xl divide-y divide-slate-100 overflow-hidden">
+      <div className="space-y-3">
         {cards.length === 0 && !adding && (
-          <p className="p-6 text-sm text-slate-500 text-center">No credit cards yet. Add your first one above.</p>
+          <p className="bg-white rounded-2xl shadow-card p-6 text-sm text-muted text-center">No credit cards yet. Add your first one above.</p>
         )}
         {cards.map((card) => (
           <CardRow

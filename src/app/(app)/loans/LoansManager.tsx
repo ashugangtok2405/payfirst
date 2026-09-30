@@ -80,8 +80,8 @@ export default function LoansManager({
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-slate-900">Loans</h1>
-          <p className="text-sm text-slate-500">
+          <h1 className="text-xl font-semibold text-ink">Loans</h1>
+          <p className="text-sm text-muted">
             {loans.length} loan{loans.length !== 1 ? "s" : ""} · Outstanding {formatMoney(totalOutstanding)} · Monthly EMI {formatMoney(totalEmi)}
           </p>
         </div>
@@ -90,10 +90,10 @@ export default function LoansManager({
         </button>
       </div>
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="text-sm text-coral">{error}</p>}
 
       {adding && (
-        <form onSubmit={handleCreate} className="bg-white border border-slate-200 rounded-xl p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <form onSubmit={handleCreate} className="bg-white rounded-2xl shadow-card p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
           <TextField label="Loan name" name="loanName" required placeholder="e.g. Home Loan - Flat" />
           <TextField label="Lender" name="lender" required placeholder="e.g. SBI" />
           <SelectField label="Loan type" name="loanType" options={LOAN_TYPES} defaultValue="personal" />
@@ -113,9 +113,9 @@ export default function LoansManager({
         </form>
       )}
 
-      <div className="bg-white border border-slate-200 rounded-xl divide-y divide-slate-100">
+      <div className="space-y-3">
         {loans.length === 0 && !adding && (
-          <p className="p-6 text-sm text-slate-500 text-center">No loans yet. Add your first one above.</p>
+          <p className="bg-white rounded-2xl shadow-card p-6 text-sm text-muted text-center">No loans yet. Add your first one above.</p>
         )}
         {loans.map((loan) => {
           const nextDue = nextOccurrenceForDay(loan.emiDueDay);
@@ -127,7 +127,7 @@ export default function LoansManager({
             <form
               key={loan.id}
               onSubmit={(e) => handleUpdate(loan.id, e)}
-              className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4"
+              className="bg-white rounded-2xl shadow-card p-5 grid grid-cols-1 sm:grid-cols-2 gap-4"
             >
               <TextField label="Loan name" name="loanName" required defaultValue={loan.loanName} />
               <TextField label="Lender" name="lender" required defaultValue={loan.lender} />
@@ -152,17 +152,17 @@ export default function LoansManager({
           ) : (
             <div key={loan.id} className="p-4 sm:p-5 flex flex-wrap items-center justify-between gap-4">
               <div>
-                <p className="font-medium text-slate-900">
-                  {loan.loanName} <span className="text-slate-400 font-normal text-sm">· {loan.lender}</span>
+                <p className="font-medium text-ink">
+                  {loan.loanName} <span className="text-muted font-normal text-sm">· {loan.lender}</span>
                 </p>
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-muted">
                   {formatMoney(loan.outstanding)} outstanding of {formatMoney(loan.principal)} ({paidOffPct}% paid off)
                   {loan.emiAmount ? ` · EMI ${formatMoney(loan.emiAmount)}` : ""}
                 </p>
               </div>
               <div className="flex items-center gap-3">
                 {paidByLoan[loan.id] ? (
-                  <span className="text-xs font-medium border rounded-full px-2.5 py-1 bg-emerald-50 text-emerald-700 border-emerald-200">
+                  <span className="text-xs font-medium border rounded-full px-2.5 py-1 bg-mint-soft text-mint border-mint/30">
                     Paid for this cycle
                   </span>
                 ) : (

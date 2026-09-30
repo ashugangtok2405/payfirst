@@ -1,16 +1,16 @@
 export const inputClass =
-  "w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-900";
+  "w-full rounded-xl border border-border bg-white px-3 py-2 text-sm text-ink placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-accent transition-shadow";
 
-export const labelClass = "block text-sm font-medium text-slate-700 mb-1";
+export const labelClass = "block text-sm font-medium text-ink mb-1";
 
 export const primaryButtonClass =
-  "bg-slate-900 text-white rounded-lg px-4 py-2 text-sm font-medium hover:bg-slate-800 disabled:opacity-60";
+  "bg-accent text-white rounded-xl px-4 py-2 text-sm font-medium hover:bg-accent-strong disabled:opacity-60 transition-colors";
 
 export const ghostButtonClass =
-  "text-sm font-medium text-slate-600 hover:text-slate-900 border border-slate-300 rounded-lg px-3 py-1.5 hover:bg-slate-100";
+  "text-sm font-medium text-muted hover:text-ink border border-border rounded-xl px-3 py-1.5 hover:bg-accent-soft transition-colors";
 
 export const dangerButtonClass =
-  "text-sm font-medium text-red-600 hover:text-red-700 border border-red-200 rounded-lg px-3 py-1.5 hover:bg-red-50";
+  "text-sm font-medium text-coral hover:text-coral border border-coral/40 rounded-xl px-3 py-1.5 hover:bg-coral-soft transition-colors";
 
 export function TextField({
   label,

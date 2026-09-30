@@ -100,10 +100,10 @@ export function urgencyFromDays(days: number): Urgency {
 }
 
 export const urgencyStyles: Record<Urgency, string> = {
-  overdue: "bg-red-100 text-red-800 border-red-300",
-  today: "bg-orange-100 text-orange-800 border-orange-300",
-  soon: "bg-amber-100 text-amber-800 border-amber-300",
-  later: "bg-slate-100 text-slate-700 border-slate-300",
+  overdue: "bg-coral-soft text-coral border-coral/30",
+  today: "bg-amber-soft text-amber border-amber/30",
+  soon: "bg-amber-soft text-amber border-amber/30",
+  later: "bg-bg text-muted border-border",
 };
 
 export const urgencyLabels: Record<Urgency, string> = {

@@ -56,10 +56,10 @@ export default function FundsManager({ funds }: { funds: MutualFund[] }) {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-slate-900">Mutual Funds</h1>
-          <p className="text-sm text-slate-500">
+          <h1 className="text-xl font-semibold text-ink">Mutual Funds</h1>
+          <p className="text-sm text-muted">
             {funds.length} fund{funds.length !== 1 ? "s" : ""} · Current value {formatMoney(totalCurrent)} ·{" "}
-            <span className={gainLoss >= 0 ? "text-emerald-600" : "text-red-600"}>
+            <span className={gainLoss >= 0 ? "text-mint" : "text-coral"}>
               {gainLoss >= 0 ? "+" : ""}
               {formatMoney(gainLoss)}
             </span>
@@ -70,10 +70,10 @@ export default function FundsManager({ funds }: { funds: MutualFund[] }) {
         </button>
       </div>
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="text-sm text-coral">{error}</p>}
 
       {adding && (
-        <form onSubmit={handleCreate} className="bg-white border border-slate-200 rounded-xl p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <form onSubmit={handleCreate} className="bg-white rounded-2xl shadow-card p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
           <TextField label="Fund name" name="fundName" required placeholder="e.g. Parag Parikh Flexi Cap" />
           <TextField label="Fund house" name="fundHouse" placeholder="e.g. PPFAS" />
           <TextField label="Folio number" name="folioNumber" />
@@ -92,9 +92,9 @@ export default function FundsManager({ funds }: { funds: MutualFund[] }) {
         </form>
       )}
 
-      <div className="bg-white border border-slate-200 rounded-xl divide-y divide-slate-100">
+      <div className="space-y-3">
         {funds.length === 0 && !adding && (
-          <p className="p-6 text-sm text-slate-500 text-center">No mutual funds yet. Add your first one above.</p>
+          <p className="bg-white rounded-2xl shadow-card p-6 text-sm text-muted text-center">No mutual funds yet. Add your first one above.</p>
         )}
         {funds.map((fund) => {
           const gl = fund.currentValue - fund.investedValue;
@@ -107,7 +107,7 @@ export default function FundsManager({ funds }: { funds: MutualFund[] }) {
             <form
               key={fund.id}
               onSubmit={(e) => handleUpdate(fund.id, e)}
-              className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4"
+              className="bg-white rounded-2xl shadow-card p-5 grid grid-cols-1 sm:grid-cols-2 gap-4"
             >
               <TextField label="Fund name" name="fundName" required defaultValue={fund.fundName} />
               <TextField label="Fund house" name="fundHouse" defaultValue={fund.fundHouse} />
@@ -129,15 +129,15 @@ export default function FundsManager({ funds }: { funds: MutualFund[] }) {
               </div>
             </form>
           ) : (
-            <div key={fund.id} className="p-4 sm:p-5 flex flex-wrap items-center justify-between gap-4">
+            <div key={fund.id} className="bg-white rounded-2xl shadow-card p-4 sm:p-5 flex flex-wrap items-center justify-between gap-4">
               <div>
-                <p className="font-medium text-slate-900">
+                <p className="font-medium text-ink">
                   {fund.fundName}{" "}
-                  {fund.fundHouse && <span className="text-slate-400 font-normal text-sm">· {fund.fundHouse}</span>}
+                  {fund.fundHouse && <span className="text-muted font-normal text-sm">· {fund.fundHouse}</span>}
                 </p>
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-muted">
                   {formatMoney(fund.currentValue)} current ·{" "}
-                  <span className={gl >= 0 ? "text-emerald-600" : "text-red-600"}>
+                  <span className={gl >= 0 ? "text-mint" : "text-coral"}>
                     {gl >= 0 ? "+" : ""}
                     {formatMoney(gl)}
                   </span>

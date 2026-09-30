@@ -26,10 +26,10 @@ export function statementStatusOf(statement: StatementWithPayments, today: Date)
 }
 
 export const statementStatusStyles: Record<StatementStatus, string> = {
-  paid: "bg-emerald-50 text-emerald-700 border-emerald-200",
-  overdue: "bg-red-50 text-red-700 border-red-200",
-  partial: "bg-amber-50 text-amber-700 border-amber-200",
-  unpaid: "bg-slate-100 text-slate-700 border-slate-300",
+  paid: "bg-mint-soft text-mint border-mint/30",
+  overdue: "bg-coral-soft text-coral border-coral/30",
+  partial: "bg-amber-soft text-amber border-amber/30",
+  unpaid: "bg-bg text-muted border-border",
 };
 
 export const statementStatusLabels: Record<StatementStatus, string> = {

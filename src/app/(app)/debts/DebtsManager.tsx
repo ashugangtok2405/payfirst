@@ -65,8 +65,8 @@ export default function DebtsManager({ debts }: { debts: Debt[] }) {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-slate-900">Other Debts</h1>
-          <p className="text-sm text-slate-500">
+          <h1 className="text-xl font-semibold text-ink">Other Debts</h1>
+          <p className="text-sm text-muted">
             Informal loans · I owe {formatMoney(iOwe)} · Owed to me {formatMoney(owedToMe)}
           </p>
         </div>
@@ -75,10 +75,10 @@ export default function DebtsManager({ debts }: { debts: Debt[] }) {
         </button>
       </div>
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="text-sm text-coral">{error}</p>}
 
       {adding && (
-        <form onSubmit={handleCreate} className="bg-white border border-slate-200 rounded-xl p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <form onSubmit={handleCreate} className="bg-white rounded-2xl shadow-card p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
           <TextField label="Person / party" name="personName" required placeholder="e.g. Rahul" />
           <SelectField label="Direction" name="direction" options={DIRECTIONS} defaultValue="owed_by_me" />
           <TextField label="Amount (₹)" name="amount" type="number" step="0.01" required />
@@ -92,9 +92,9 @@ export default function DebtsManager({ debts }: { debts: Debt[] }) {
         </form>
       )}
 
-      <div className="bg-white border border-slate-200 rounded-xl divide-y divide-slate-100">
+      <div className="space-y-3">
         {debts.length === 0 && !adding && (
-          <p className="p-6 text-sm text-slate-500 text-center">No debts tracked yet.</p>
+          <p className="bg-white rounded-2xl shadow-card p-6 text-sm text-muted text-center">No debts tracked yet.</p>
         )}
         {debts.map((debt) => {
           const days = debt.dueDate ? daysUntil(new Date(debt.dueDate)) : null;
@@ -104,7 +104,7 @@ export default function DebtsManager({ debts }: { debts: Debt[] }) {
             <form
               key={debt.id}
               onSubmit={(e) => handleUpdate(debt.id, e)}
-              className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4"
+              className="bg-white rounded-2xl shadow-card p-5 grid grid-cols-1 sm:grid-cols-2 gap-4"
             >
               <TextField label="Person / party" name="personName" required defaultValue={debt.personName} />
               <SelectField label="Direction" name="direction" options={DIRECTIONS} defaultValue={debt.direction} />
@@ -121,15 +121,15 @@ export default function DebtsManager({ debts }: { debts: Debt[] }) {
               </div>
             </form>
           ) : (
-            <div key={debt.id} className={`p-4 sm:p-5 flex flex-wrap items-center justify-between gap-4 ${debt.settled ? "opacity-50" : ""}`}>
+            <div key={debt.id} className={`bg-white rounded-2xl shadow-card p-4 sm:p-5 flex flex-wrap items-center justify-between gap-4 ${debt.settled ? "opacity-50" : ""}`}>
               <div>
-                <p className="font-medium text-slate-900">
+                <p className="font-medium text-ink">
                   {debt.personName}{" "}
-                  <span className="text-slate-400 font-normal text-sm">
+                  <span className="text-muted font-normal text-sm">
                     · {debt.direction === "owed_by_me" ? "I owe them" : "They owe me"}
                   </span>
                 </p>
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-muted">
                   {formatMoney(debt.amount)}
                   {debt.dueDate ? ` · due ${new Date(debt.dueDate).toLocaleDateString("en-IN")}` : ""}
                   {debt.settled ? " · Settled" : ""}

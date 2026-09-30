@@ -3,6 +3,7 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
+import { createTransaction } from "@/app/(app)/transactions/actions";
 
 async function requireUserId() {
   const session = await auth();
@@ -58,6 +59,49 @@ export async function deleteCreditCard(id: string) {
   if (!existing || existing.userId !== userId) throw new Error("Not found");
 
   await prisma.creditCard.delete({ where: { id } });
+  revalidatePath("/cards");
+  revalidatePath("/dashboard");
+}
+
+export async function setCardDueDate(id: string, dateStr: string) {
+  const userId = await requireUserId();
+  const existing = await prisma.creditCard.findUnique({ where: { id } });
+  if (!existing || existing.userId !== userId) throw new Error("Not found");
+  if (!dateStr) throw new Error("Choose a date.");
+
+  await prisma.creditCard.update({ where: { id }, data: { nextDueDate: new Date(dateStr) } });
+  revalidatePath("/cards");
+  revalidatePath("/dashboard");
+}
+
+// The simple "Pay" flow (as opposed to the advanced Statement-based Pay):
+// logs a plain bank/card -> card transfer and, since paying is what a user
+// does to close out a billing cycle, advances the due date a month so the
+// dashboard doesn't nag about a bill they just paid.
+export async function payCard(cardId: string, formData: FormData) {
+  const userId = await requireUserId();
+  const card = await prisma.creditCard.findUnique({ where: { id: cardId } });
+  if (!card || card.userId !== userId) throw new Error("Not found");
+
+  const from = String(formData.get("from") ?? "");
+  const amount = String(formData.get("amount") ?? "");
+  const date = String(formData.get("date") ?? "");
+  const note = String(formData.get("note") ?? "");
+
+  const payload = new FormData();
+  payload.set("type", "transfer");
+  payload.set("from", from);
+  payload.set("to", `card:${cardId}`);
+  payload.set("amount", amount);
+  payload.set("date", date);
+  payload.set("note", note);
+
+  await createTransaction(payload);
+
+  const base = card.nextDueDate ?? new Date();
+  const advanced = new Date(base.getFullYear(), base.getMonth() + 1, base.getDate());
+  await prisma.creditCard.update({ where: { id: cardId }, data: { nextDueDate: advanced } });
+
   revalidatePath("/cards");
   revalidatePath("/dashboard");
 }

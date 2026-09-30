@@ -58,16 +58,16 @@ export default function PayStatementButton({ cardId, cardLabel, statementOptions
 
       {open && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={() => setOpen(false)}>
-          <div className="bg-white rounded-xl p-5 w-full max-w-sm space-y-4" onClick={(e) => e.stopPropagation()}>
-            <h3 className="font-semibold text-slate-900">Pay {cardLabel}</h3>
+          <div className="bg-white rounded-2xl p-5 w-full max-w-sm space-y-4" onClick={(e) => e.stopPropagation()}>
+            <h3 className="font-semibold text-ink">Pay {cardLabel}</h3>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Statement</label>
+                <label className="block text-sm font-medium text-ink mb-1">Statement</label>
                 <select
                   name="statementId"
                   value={statementId}
                   onChange={(e) => setStatementId(e.target.value)}
-                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900"
+                  className="w-full rounded-xl border border-border bg-white px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-accent"
                 >
                   {statementOptions.map((s) => (
                     <option key={s.id} value={s.id}>
@@ -78,10 +78,10 @@ export default function PayStatementButton({ cardId, cardLabel, statementOptions
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Pay from</label>
+                <label className="block text-sm font-medium text-ink mb-1">Pay from</label>
                 <select
                   name="from"
-                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900"
+                  className="w-full rounded-xl border border-border bg-white px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-accent"
                 >
                   {sourceOptions.map((opt) => (
                     <option key={opt.value} value={opt.value}>
@@ -102,7 +102,7 @@ export default function PayStatementButton({ cardId, cardLabel, statementOptions
               <TextField label="Date" name="date" type="date" defaultValue={todayInputValue()} required />
               <TextField label="Note" name="note" placeholder="Optional" />
 
-              {error && <p className="text-sm text-red-600">{error}</p>}
+              {error && <p className="text-sm text-coral">{error}</p>}
 
               <div className="flex justify-end gap-2">
                 <button type="button" onClick={() => setOpen(false)} className={ghostButtonClass}>

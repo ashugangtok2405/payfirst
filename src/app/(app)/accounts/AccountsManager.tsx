@@ -61,8 +61,8 @@ export default function AccountsManager({ accounts }: { accounts: BankAccount[] 
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-slate-900">Bank Accounts</h1>
-          <p className="text-sm text-slate-500">
+          <h1 className="text-xl font-semibold text-ink">Bank Accounts</h1>
+          <p className="text-sm text-muted">
             {accounts.length} account{accounts.length !== 1 ? "s" : ""} · Total balance {formatMoney(totalBalance)}
           </p>
         </div>
@@ -71,10 +71,10 @@ export default function AccountsManager({ accounts }: { accounts: BankAccount[] 
         </button>
       </div>
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="text-sm text-coral">{error}</p>}
 
       {adding && (
-        <form onSubmit={handleCreate} className="bg-white border border-slate-200 rounded-xl p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <form onSubmit={handleCreate} className="bg-white rounded-2xl shadow-card p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
           <TextField label="Account name" name="accountName" required placeholder="e.g. Primary Savings" />
           <TextField label="Bank name" name="bankName" required placeholder="e.g. HDFC Bank" />
           <SelectField label="Account type" name="accountType" options={ACCOUNT_TYPES} defaultValue="savings" />
@@ -89,16 +89,16 @@ export default function AccountsManager({ accounts }: { accounts: BankAccount[] 
         </form>
       )}
 
-      <div className="bg-white border border-slate-200 rounded-xl divide-y divide-slate-100">
+      <div className="space-y-3">
         {accounts.length === 0 && !adding && (
-          <p className="p-6 text-sm text-slate-500 text-center">No bank accounts yet. Add your first one above.</p>
+          <p className="bg-white rounded-2xl shadow-card p-6 text-sm text-muted text-center">No bank accounts yet. Add your first one above.</p>
         )}
         {accounts.map((account) =>
           editingId === account.id ? (
             <form
               key={account.id}
               onSubmit={(e) => handleUpdate(account.id, e)}
-              className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4"
+              className="bg-white rounded-2xl shadow-card p-5 grid grid-cols-1 sm:grid-cols-2 gap-4"
             >
               <TextField label="Account name" name="accountName" required defaultValue={account.accountName} />
               <TextField label="Bank name" name="bankName" required defaultValue={account.bankName} />
@@ -116,25 +116,22 @@ export default function AccountsManager({ accounts }: { accounts: BankAccount[] 
               </div>
             </form>
           ) : (
-            <div key={account.id} className="p-4 sm:p-5 flex items-center justify-between gap-4">
-              <div>
-                <p className="font-medium text-slate-900">
-                  {account.accountName}{" "}
-                  <span className="text-slate-400 font-normal text-sm">
-                    · {account.bankName}
-                    {account.last4 ? ` ••${account.last4}` : ""}
-                  </span>
-                </p>
-                <p className="text-xs text-slate-500 capitalize">{account.accountType} account</p>
-              </div>
-              <div className="flex items-center gap-3">
-                <p className="font-semibold text-slate-900 tabular-nums">{formatMoney(account.balance)}</p>
-                <button onClick={() => setEditingId(account.id)} className={ghostButtonClass}>
-                  Edit
-                </button>
-                <button onClick={() => handleDelete(account.id, account.accountName)} className={dangerButtonClass}>
-                  Delete
-                </button>
+            <div key={account.id} className="bg-white rounded-2xl shadow-card p-4 sm:p-5">
+              <p className="font-medium text-ink text-sm truncate">
+                {account.accountName} · {account.bankName}
+                {account.last4 ? ` ••${account.last4}` : ""}{" "}
+                <span className="text-muted font-normal capitalize">({account.accountType} Account)</span>
+              </p>
+              <div className="flex items-center justify-between gap-3 mt-2">
+                <p className="font-semibold text-ink tabular-nums">{formatMoney(account.balance)}</p>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button onClick={() => setEditingId(account.id)} className={ghostButtonClass}>
+                    Edit
+                  </button>
+                  <button onClick={() => handleDelete(account.id, account.accountName)} className={dangerButtonClass}>
+                    Delete
+                  </button>
+                </div>
               </div>
             </div>
           )

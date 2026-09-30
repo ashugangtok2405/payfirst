@@ -123,8 +123,8 @@ function TransactionFields({
         {(["expense", "income", "transfer"] as const).map((t) => (
           <label
             key={t}
-            className={`flex-1 text-center capitalize rounded-lg border px-3 py-2 text-sm font-medium cursor-pointer ${
-              type === t ? "bg-slate-900 text-white border-slate-900" : "border-slate-300 text-slate-600"
+            className={`flex-1 text-center capitalize rounded-xl border px-3 py-2 text-sm font-medium cursor-pointer ${
+              type === t ? "bg-accent text-white border-accent" : "border-border text-muted"
             }`}
           >
             <input type="radio" name="type" value={t} checked={type === t} onChange={() => setType(t)} className="sr-only" />
@@ -149,9 +149,9 @@ function TransactionFields({
         {type === "transfer" && (
           <>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">From</label>
+              <label className="block text-sm font-medium text-ink mb-1">From</label>
               <select
-                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900"
+                className="w-full rounded-xl border border-border bg-white px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-accent"
                 name="from"
                 value={fromValue}
                 onChange={(e) => setFromValue(e.target.value)}
@@ -162,13 +162,13 @@ function TransactionFields({
                   </option>
                 ))}
               </select>
-              {fromType === "card" && <p className="text-xs text-slate-400 mt-1">Cash advance — increases what you owe on the card.</p>}
+              {fromType === "card" && <p className="text-xs text-muted mt-1">Cash advance — increases what you owe on the card.</p>}
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">To</label>
+              <label className="block text-sm font-medium text-ink mb-1">To</label>
               <select
                 key={fromValue}
-                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900"
+                className="w-full rounded-xl border border-border bg-white px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-accent"
                 name="to"
                 defaultValue={toDefault}
               >
@@ -281,8 +281,8 @@ function TransactionsManagerInner({
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-slate-900">Transactions</h1>
-          <p className="text-sm text-slate-500">Log day-to-day spending, income, and payments between your accounts.</p>
+          <h1 className="text-xl font-semibold text-ink">Transactions</h1>
+          <p className="text-sm text-muted">Log day-to-day spending, income, and payments between your accounts.</p>
         </div>
         <button
           onClick={() => {
@@ -295,16 +295,16 @@ function TransactionsManagerInner({
         </button>
       </div>
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="text-sm text-coral">{error}</p>}
 
       {bankAccounts.length === 0 && (
-        <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+        <p className="text-sm text-amber bg-amber-soft border border-amber rounded-xl px-3 py-2">
           Add a bank account first — every transaction needs one as the source or destination.
         </p>
       )}
 
       {adding && bankAccounts.length > 0 && (
-        <form onSubmit={handleCreate} className="bg-white border border-slate-200 rounded-xl p-5 space-y-4">
+        <form onSubmit={handleCreate} className="bg-white rounded-2xl shadow-card p-5 space-y-4">
           <TransactionFields
             type={addType}
             setType={setAddType}
@@ -323,9 +323,9 @@ function TransactionsManagerInner({
         </form>
       )}
 
-      <div className="bg-white border border-slate-200 rounded-xl divide-y divide-slate-100">
+      <div className="bg-white rounded-2xl shadow-card divide-y divide-border">
         {transactions.length === 0 && (
-          <p className="p-6 text-sm text-slate-500 text-center">No transactions logged yet.</p>
+          <p className="p-6 text-sm text-muted text-center">No transactions logged yet.</p>
         )}
         {transactions.map((txn) =>
           editingId === txn.id ? (
@@ -355,31 +355,31 @@ function TransactionsManagerInner({
               </div>
             </form>
           ) : (
-            <div key={txn.id} className="p-4 sm:p-5 flex items-center justify-between gap-4">
-              <div>
-                <p className="font-medium text-slate-900 text-sm">{describe(txn)}</p>
-                <p className="text-xs text-slate-500">
-                  {new Date(txn.date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
-                  {txn.note ? ` · ${txn.note}` : ""}
-                </p>
-              </div>
-              <div className="flex items-center gap-3">
-                <span className={`font-semibold tabular-nums text-sm ${txn.type === "income" ? "text-emerald-600" : "text-slate-900"}`}>
+            <div key={txn.id} className="p-4 sm:p-5">
+              <p className="font-medium text-ink text-sm">{describe(txn)}</p>
+              <p className="text-xs text-muted mt-0.5">
+                {new Date(txn.date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+                {txn.note ? ` · ${txn.note}` : ""}
+              </p>
+              <div className="flex items-center justify-between gap-3 mt-2">
+                <span className={`font-semibold tabular-nums text-sm ${txn.type === "income" ? "text-mint" : "text-ink"}`}>
                   {txn.type === "income" ? "+" : "−"}
                   {formatMoney(txn.amount)}
                 </span>
-                <button
-                  onClick={() => {
-                    setAdding(false);
-                    startEdit(txn);
-                  }}
-                  className={ghostButtonClass}
-                >
-                  Edit
-                </button>
-                <button onClick={() => handleDelete(txn.id, describe(txn))} className={dangerButtonClass}>
-                  Delete
-                </button>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={() => {
+                      setAdding(false);
+                      startEdit(txn);
+                    }}
+                    className={ghostButtonClass}
+                  >
+                    Edit
+                  </button>
+                  <button onClick={() => handleDelete(txn.id, describe(txn))} className={dangerButtonClass}>
+                    Delete
+                  </button>
+                </div>
               </div>
             </div>
           )

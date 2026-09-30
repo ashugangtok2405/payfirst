@@ -96,10 +96,25 @@ export async function generateStatement(cardId: string) {
   ]);
 
   const backlogSums = sumEligible(backlog, cardId);
-  const openingBalance =
-    (previousStatement ? remainingDueOf(previousStatement) : 0) + backlogSums.purchaseTotal - backlogSums.refundTotal;
-
   const { purchaseTotal, refundTotal } = sumEligible(periodTxns, cardId);
+
+  // currentBalance is the live running total kept in sync by every transaction
+  // (moveDelta) - but a card's balance can also be set directly (creating the
+  // card with an existing balance, or a manual "Edit card" correction), which
+  // no Transaction row backs. For a card's very first statement there's no
+  // previousStatement to carry that forward, so without this the untracked
+  // portion of currentBalance would silently vanish from the statement,
+  // producing a bogus ₹0 "paid" statement for real, un-billed debt.
+  const untrackedBalance = previousStatement
+    ? 0
+    : card.currentBalance - (backlogSums.purchaseTotal - backlogSums.refundTotal) - (purchaseTotal - refundTotal);
+
+  const openingBalance =
+    (previousStatement ? remainingDueOf(previousStatement) : 0) +
+    untrackedBalance +
+    backlogSums.purchaseTotal -
+    backlogSums.refundTotal;
+
   const feeTotal = 0;
   const interestTotal = 0;
   const statementTotal = openingBalance + purchaseTotal + feeTotal + interestTotal - refundTotal;
@@ -138,6 +153,15 @@ export async function generateStatement(cardId: string) {
 
   revalidateAll();
   return statement;
+}
+
+export async function deleteStatement(statementId: string) {
+  const userId = await requireUserId();
+  const existing = await prisma.creditCardStatement.findUnique({ where: { id: statementId } });
+  if (!existing || existing.userId !== userId) throw new Error("Not found");
+
+  await prisma.creditCardStatement.delete({ where: { id: statementId } });
+  revalidateAll();
 }
 
 export async function updateStatement(statementId: string, formData: FormData) {

@@ -94,10 +94,10 @@ export default function RemindersCard({ reminderDaysBefore }: { reminderDaysBefo
   }
 
   return (
-    <div className="bg-white border border-slate-200 rounded-xl p-4 sm:p-5 flex flex-wrap items-center justify-between gap-4">
+    <div className="bg-white rounded-2xl shadow-card p-4 sm:p-5 flex flex-wrap items-center justify-between gap-4">
       <div>
-        <p className="font-medium text-slate-900 text-sm">Due-date reminders</p>
-        <p className="text-xs text-slate-500 mt-0.5">
+        <p className="font-medium text-ink text-sm">Due-date reminders</p>
+        <p className="text-xs text-muted mt-0.5">
           {state === "unsupported" && "Not supported on this browser."}
           {state === "denied" && "Notifications are blocked — enable them in your browser/site settings."}
           {state === "checking" && "Checking status…"}
@@ -106,7 +106,7 @@ export default function RemindersCard({ reminderDaysBefore }: { reminderDaysBefo
         </p>
       </div>
       <div className="flex items-center gap-3">
-        <label className="flex items-center gap-2 text-sm text-slate-600">
+        <label className="flex items-center gap-2 text-sm text-muted">
           Remind me
           <input
             type="number"
@@ -118,7 +118,7 @@ export default function RemindersCard({ reminderDaysBefore }: { reminderDaysBefo
             onKeyDown={(e) => {
               if (e.key === "Enter") e.currentTarget.blur();
             }}
-            className="w-16 rounded-lg border border-slate-300 bg-white px-2 py-1 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900"
+            className="w-16 rounded-xl border border-border bg-white px-2 py-1 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-accent"
           />
           day(s) before
         </label>
@@ -133,7 +133,7 @@ export default function RemindersCard({ reminderDaysBefore }: { reminderDaysBefo
           </button>
         )}
       </div>
-      {error && <p className="text-sm text-red-600 w-full">{error}</p>}
+      {error && <p className="text-sm text-coral w-full">{error}</p>}
     </div>
   );
 }

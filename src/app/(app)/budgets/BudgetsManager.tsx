@@ -17,7 +17,7 @@ function BudgetRow({ row, editable }: { row: Row; editable: boolean }) {
   const pct = hasBudget ? Math.round((row.spent / row.budget!) * 100) : 0;
   const over = hasBudget && row.spent > row.budget!;
 
-  const barColor = !hasBudget ? "bg-slate-300" : over ? "bg-red-500" : pct >= 70 ? "bg-amber-500" : "bg-emerald-500";
+  const barColor = !hasBudget ? "bg-muted" : over ? "bg-coral" : pct >= 70 ? "bg-amber" : "bg-mint";
 
   function save() {
     setError(null);
@@ -31,23 +31,23 @@ function BudgetRow({ row, editable }: { row: Row; editable: boolean }) {
   }
 
   return (
-    <div className="p-4 sm:p-5">
+    <div className="bg-white rounded-2xl shadow-card p-4 sm:p-5">
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
-          <p className="font-medium text-slate-900 text-sm">{row.category}</p>
-          <p className="text-xs text-slate-500 mt-0.5">
+          <p className="font-medium text-ink text-sm">{row.category}</p>
+          <p className="text-xs text-muted mt-0.5">
             {formatMoney(row.spent)} spent
             {hasBudget && (
               <>
                 {" "}
                 of {formatMoney(row.budget!)}
-                {over && <span className="text-red-600 font-medium"> · over by {formatMoney(row.spent - row.budget!)}</span>}
+                {over && <span className="text-coral font-medium"> · over by {formatMoney(row.spent - row.budget!)}</span>}
               </>
             )}
           </p>
         </div>
         {editable ? (
-          <label className="flex items-center gap-2 text-sm text-slate-600 shrink-0">
+          <label className="flex items-center gap-2 text-sm text-muted shrink-0">
             Budget ₹
             <input
               type="number"
@@ -60,22 +60,22 @@ function BudgetRow({ row, editable }: { row: Row; editable: boolean }) {
               onKeyDown={(e) => {
                 if (e.key === "Enter") e.currentTarget.blur();
               }}
-              className="w-24 rounded-lg border border-slate-300 bg-white px-2 py-1 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900"
+              className="w-24 rounded-xl border border-border bg-white px-2 py-1 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-accent"
             />
             / month
           </label>
         ) : (
-          <p className="text-sm text-slate-400 shrink-0">{hasBudget ? `Budget ${formatMoney(row.budget!)}` : "No budget"}</p>
+          <p className="text-sm text-muted shrink-0">{hasBudget ? `Budget ${formatMoney(row.budget!)}` : "No budget"}</p>
         )}
       </div>
 
       {hasBudget && (
-        <div className="mt-3 h-2 rounded-full bg-slate-100 overflow-hidden">
+        <div className="mt-3 h-2 rounded-full bg-accent-soft overflow-hidden">
           <div className={`h-full rounded-full ${barColor}`} style={{ width: `${Math.min(pct, 100)}%` }} />
         </div>
       )}
 
-      {error && <p className="text-xs text-red-600 mt-1">{error}</p>}
+      {error && <p className="text-xs text-coral mt-1">{error}</p>}
     </div>
   );
 }
@@ -114,7 +114,7 @@ function AddCategoryForm({ existing, onDone }: { existing: string[]; onDone: () 
   }
 
   return (
-    <form onSubmit={handleSubmit} className="bg-white border border-slate-200 rounded-xl p-5 flex flex-wrap items-end gap-3">
+    <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-card p-5 flex flex-wrap items-end gap-3">
       <div className="flex-1 min-w-[10rem]">
         <label className={labelClass}>New category</label>
         <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Pet Care" className={inputClass} autoFocus />
@@ -133,7 +133,7 @@ function AddCategoryForm({ existing, onDone }: { existing: string[]; onDone: () 
       <button type="submit" disabled={pending} className={primaryButtonClass}>
         Add category
       </button>
-      {error && <p className="text-sm text-red-600 basis-full">{error}</p>}
+      {error && <p className="text-sm text-coral basis-full">{error}</p>}
     </form>
   );
 }
@@ -163,8 +163,8 @@ export default function BudgetsManager({
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-xl font-semibold text-slate-900">Budgets</h1>
-          <p className="text-sm text-slate-500">
+          <h1 className="text-xl font-semibold text-ink">Budgets</h1>
+          <p className="text-sm text-muted">
             {formatMoney(totalSpent)} spent
             {totalBudget > 0 ? ` of ${formatMoney(totalBudget)} budgeted` : ""}
           </p>
@@ -173,7 +173,7 @@ export default function BudgetsManager({
           <Link href={prevHref} className={ghostButtonClass} aria-label="Previous month">
             ← Prev
           </Link>
-          <span className="text-sm font-medium text-slate-900 min-w-[9rem] text-center">{monthLabel}</span>
+          <span className="text-sm font-medium text-ink min-w-[9rem] text-center">{monthLabel}</span>
           <Link href={nextHref} className={ghostButtonClass} aria-label="Next month">
             Next →
           </Link>
@@ -191,14 +191,14 @@ export default function BudgetsManager({
       </div>
 
       {!isCurrentMonth && (
-        <p className="text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+        <p className="text-xs text-muted bg-bg border border-border rounded-xl px-3 py-2">
           Viewing a past/future month — budget caps apply every month and can only be changed from the current month.
         </p>
       )}
 
       {adding && <AddCategoryForm existing={allCategories} onDone={() => setAdding(false)} />}
 
-      <div className="bg-white border border-slate-200 rounded-xl divide-y divide-slate-100">
+      <div className="bg-white rounded-2xl shadow-card divide-y divide-border">
         {rows.map((row) => (
           <BudgetRow key={row.category} row={row} editable={isCurrentMonth} />
         ))}

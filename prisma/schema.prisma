@@ -113,7 +113,8 @@ model CreditCard {
   minPayment     Float?
   apr            Float?
   notes          String?
-  isActive       Boolean  @default(true)
+  isActive       Boolean   @default(true)
+  nextDueDate    DateTime? // user-set next payment due date - takes priority over dueDay/statement guesses
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 

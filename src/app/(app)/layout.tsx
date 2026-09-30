@@ -1,14 +1,18 @@
 import { auth, signOut } from "@/lib/auth";
-import Sidebar from "./Sidebar";
+import BottomNav from "./BottomNav";
+import { ghostButtonClass } from "@/components/form";
 
-const NAV_ITEMS = [
-  { href: "/dashboard", label: "Dashboard" },
-  { href: "/calendar", label: "Calendar" },
-  { href: "/transactions", label: "Transactions" },
-  { href: "/budgets", label: "Budgets" },
+const PRIMARY_ITEMS = [
+  { href: "/dashboard", label: "Home" },
+  { href: "/transactions", label: "Activity" },
+  { href: "/cards", label: "Cards" },
   { href: "/goals", label: "Goals" },
+];
+
+const MORE_ITEMS = [
+  { href: "/calendar", label: "Bill Calendar" },
+  { href: "/budgets", label: "Budgets" },
   { href: "/accounts", label: "Bank Accounts" },
-  { href: "/cards", label: "Credit Cards" },
   { href: "/loans", label: "Loans" },
   { href: "/mutual-funds", label: "Mutual Funds" },
   { href: "/debts", label: "Other Debts" },
@@ -23,16 +27,19 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const session = await auth();
 
   return (
-    <div className="min-h-screen flex flex-col md:flex-row">
-      <Sidebar items={NAV_ITEMS} email={session?.user?.email}>
-        <form action={signOutAction}>
-          <button className="w-full text-sm font-medium text-slate-600 hover:text-slate-900 border border-slate-300 rounded-lg px-3 py-1.5 hover:bg-slate-100">
-            Sign out
-          </button>
-        </form>
-      </Sidebar>
+    <div className="min-h-screen flex flex-col">
+      <main className="flex-1 w-full max-w-md mx-auto px-4 py-5 pb-28 min-w-0">{children}</main>
 
-      <main className="flex-1 w-full max-w-6xl mx-auto px-4 sm:px-6 py-6 min-w-0">{children}</main>
+      <BottomNav
+        primaryItems={PRIMARY_ITEMS}
+        moreItems={MORE_ITEMS}
+        email={session?.user?.email}
+        signOutSlot={
+          <form action={signOutAction}>
+            <button className={`w-full ${ghostButtonClass}`}>Sign out</button>
+          </form>
+        }
+      />
     </div>
   );
 }

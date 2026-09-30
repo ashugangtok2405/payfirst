@@ -9,9 +9,12 @@ import {
   urgencyFromDays,
   urgencyStyles,
   urgencyLabels,
+  todayInAppTimeZone,
   type Urgency,
 } from "@/lib/dueDates";
+import { remainingDueOf, statementStatusOf, statementStatusStyles, statementStatusLabels } from "@/lib/creditCardStatements";
 import RemindersCard from "../reminders/RemindersCard";
+import PayStatementButton from "../cards/PayStatementButton";
 
 type GoalProgress = {
   id: string;
@@ -20,22 +23,45 @@ type GoalProgress = {
   saved: number;
 };
 
-type DueItem = {
-  key: string;
-  label: string;
-  detail: string;
-  amount: number;
-  dueDate: Date;
-  days: number;
-  urgency: Urgency;
-  href: string;
-};
+type DueItem =
+  | {
+      kind: "urgency";
+      key: string;
+      label: string;
+      detail: string;
+      amount: number;
+      dueDate: Date;
+      days: number;
+      urgency: Urgency;
+      href: string;
+    }
+  | {
+      kind: "statement";
+      key: string;
+      label: string;
+      detail: string;
+      amount: number;
+      dueDate: Date;
+      days: number;
+      statementStatus: "overdue" | "partial" | "unpaid";
+      href: string;
+      cardId: string;
+      cardLabel: string;
+      statementOptions: { id: string; label: string; remainingDue: number }[];
+    }
+  | {
+      key: string;
+      kind: "unbilled";
+      label: string;
+      detail: string;
+      href: string;
+    };
 
 export default async function DashboardPage() {
   const session = await auth();
   const userId = session!.user.id;
 
-  const [accounts, cards, loans, funds, debts, user, payments, goals] = await Promise.all([
+  const [accounts, cards, loans, funds, debts, user, payments, goals, statements] = await Promise.all([
     prisma.bankAccount.findMany({ where: { userId } }),
     prisma.creditCard.findMany({ where: { userId } }),
     prisma.loan.findMany({ where: { userId } }),
@@ -47,7 +73,17 @@ export default async function DashboardPage() {
       select: { toAccountType: true, toAccountId: true, date: true },
     }),
     prisma.goal.findMany({ where: { userId }, include: { contributions: { select: { amount: true } } } }),
+    prisma.creditCardStatement.findMany({
+      where: { userId },
+      orderBy: { periodEnd: "desc" },
+      include: { payments: { include: { transaction: true } } },
+    }),
   ]);
+
+  const statementsByCard: Record<string, typeof statements> = {};
+  for (const statement of statements) {
+    (statementsByCard[statement.cardId] ??= []).push(statement);
+  }
 
   const activeGoals: GoalProgress[] = goals
     .map((g) => ({ id: g.id, name: g.name, targetAmount: g.targetAmount, saved: g.contributions.reduce((s, c) => s + c.amount, 0) }))
@@ -59,22 +95,65 @@ export default async function DashboardPage() {
     return payments.some((p) => p.toAccountType === type && p.toAccountId === id && p.date > cycleStart && p.date <= cycleEnd);
   }
 
+  const todayDate = todayInAppTimeZone();
   const dueItems: DueItem[] = [];
 
   for (const card of cards) {
-    if (paidThisCycle("card", card.id, card.dueDay)) continue;
-    const dueDate = nextOccurrenceForDay(card.dueDay);
-    const days = daysUntil(dueDate);
-    dueItems.push({
-      key: `card-${card.id}`,
-      label: card.cardName,
-      detail: `${card.bankName} credit card payment`,
-      amount: card.minPayment ?? card.currentBalance,
-      dueDate,
-      days,
-      urgency: urgencyFromDays(days),
-      href: "/cards",
-    });
+    if (card.currentBalance <= 0) continue;
+
+    // A manually-set payment date is authoritative once the user sets one -
+    // it always wins over the (optional, advanced) Statement-derived date.
+    if (card.nextDueDate) {
+      const days = daysUntil(card.nextDueDate);
+      dueItems.push({
+        kind: "urgency",
+        key: `card-${card.id}`,
+        label: card.cardName,
+        detail: `${card.bankName} credit card payment`,
+        amount: card.currentBalance,
+        dueDate: card.nextDueDate,
+        days,
+        urgency: urgencyFromDays(days),
+        href: "/cards",
+      });
+      continue;
+    }
+
+    const cardStatements = statementsByCard[card.id] ?? [];
+    const latestStatement = cardStatements[0];
+    const unpaidLatest = latestStatement ? remainingDueOf(latestStatement) : 0;
+
+    if (unpaidLatest > 0) {
+      const status = statementStatusOf(latestStatement, todayDate) as "overdue" | "partial" | "unpaid";
+      const days = daysUntil(latestStatement.dueDate);
+      const unpaidStatements = cardStatements.filter((s) => remainingDueOf(s) > 0);
+      dueItems.push({
+        kind: "statement",
+        key: `card-${card.id}`,
+        label: card.cardName,
+        detail: `${card.bankName} credit card payment`,
+        amount: unpaidLatest,
+        dueDate: latestStatement.dueDate,
+        days,
+        statementStatus: status,
+        href: "/cards",
+        cardId: card.id,
+        cardLabel: card.cardName,
+        statementOptions: unpaidStatements.map((s) => ({
+          id: s.id,
+          label: s.periodEnd.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }),
+          remainingDue: remainingDueOf(s),
+        })),
+      });
+    } else {
+      dueItems.push({
+        kind: "unbilled",
+        key: `card-${card.id}`,
+        label: card.cardName,
+        detail: `${card.bankName} · ${formatMoney(card.currentBalance)} - set a payment date`,
+        href: "/cards",
+      });
+    }
   }
 
   for (const loan of loans) {
@@ -82,6 +161,7 @@ export default async function DashboardPage() {
     const dueDate = nextOccurrenceForDay(loan.emiDueDay);
     const days = daysUntil(dueDate);
     dueItems.push({
+      kind: "urgency",
       key: `loan-${loan.id}`,
       label: loan.loanName,
       detail: `${loan.lender} EMI`,
@@ -98,6 +178,7 @@ export default async function DashboardPage() {
     const dueDate = nextOccurrenceForDay(fund.sipDueDay);
     const days = daysUntil(dueDate);
     dueItems.push({
+      kind: "urgency",
       key: `fund-${fund.id}`,
       label: fund.fundName,
       detail: "Mutual fund SIP",
@@ -114,6 +195,7 @@ export default async function DashboardPage() {
     const dueDate = new Date(debt.dueDate);
     const days = daysUntil(dueDate);
     dueItems.push({
+      kind: "urgency",
       key: `debt-${debt.id}`,
       label: debt.personName,
       detail: debt.direction === "owed_by_me" ? "You owe them" : "They owe you",
@@ -125,9 +207,9 @@ export default async function DashboardPage() {
     });
   }
 
-  dueItems.sort((a, b) => a.days - b.days);
-  const upcoming = dueItems.filter((i) => i.days <= 30);
-  const overdueCount = dueItems.filter((i) => i.urgency === "overdue").length;
+  dueItems.sort((a, b) => (a.kind === "unbilled" ? Infinity : a.days) - (b.kind === "unbilled" ? Infinity : b.days));
+  const upcoming = dueItems.filter((i) => i.kind === "unbilled" || i.days <= 30);
+  const overdueCount = dueItems.filter((i) => (i.kind === "urgency" && i.urgency === "overdue") || (i.kind === "statement" && i.statementStatus === "overdue")).length;
 
   const totalBankBalance = accounts.reduce((s, a) => s + a.balance, 0);
   const totalCardDebt = cards.reduce((s, c) => s + c.currentBalance, 0);
@@ -139,70 +221,104 @@ export default async function DashboardPage() {
   const totalLiabilities = totalCardDebt + totalLoanDebt;
   const netWorth = totalAssets + debtNet - totalLiabilities;
 
+  const initials = (session?.user?.name ?? session?.user?.email ?? "?")
+    .trim()
+    .split(/\s+/)
+    .map((w) => w[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+  const today = new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "short" });
+
   const summaryCards = [
-    { label: "Bank Balance", value: totalBankBalance, href: "/accounts", sub: `${accounts.length} account${accounts.length !== 1 ? "s" : ""}` },
-    { label: "Card Debt", value: totalCardDebt, href: "/cards", sub: `${cards.length} card${cards.length !== 1 ? "s" : ""}`, negative: true },
-    { label: "Loan Outstanding", value: totalLoanDebt, href: "/loans", sub: `${loans.length} loan${loans.length !== 1 ? "s" : ""}`, negative: true },
-    { label: "Mutual Funds", value: totalFundValue, href: "/mutual-funds", sub: `${funds.length} fund${funds.length !== 1 ? "s" : ""}` },
+    { label: "Bank Balance", value: totalBankBalance, href: "/accounts", sub: `${accounts.length} account${accounts.length !== 1 ? "s" : ""}`, tint: "mint" as const },
+    { label: "Card Debt", value: totalCardDebt, href: "/cards", sub: `${cards.length} card${cards.length !== 1 ? "s" : ""}`, tint: "coral" as const },
+    { label: "Loan Outstanding", value: totalLoanDebt, href: "/loans", sub: `${loans.length} loan${loans.length !== 1 ? "s" : ""}`, tint: "coral" as const },
+    { label: "Mutual Funds", value: totalFundValue, href: "/mutual-funds", sub: `${funds.length} fund${funds.length !== 1 ? "s" : ""}`, tint: "teal" as const },
   ];
+  const tintClasses = {
+    mint: "bg-mint-soft text-mint",
+    coral: "bg-coral-soft text-coral",
+    teal: "bg-teal-soft text-teal",
+  };
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
+    <div className="space-y-5">
+      <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-slate-900">
-            Welcome back{session?.user?.name ? `, ${session.user.name}` : ""}
-          </h1>
-          <p className="text-sm text-slate-500">Here&apos;s where things stand today.</p>
+          <p className="font-display font-semibold text-ink">
+            Hi{session?.user?.name ? `, ${session.user.name.split(" ")[0]}` : ""}
+          </p>
+          <p className="text-xs text-muted mt-0.5">{today}</p>
         </div>
-        <div className="flex gap-2">
-          <Link href="/transactions?add=expense" className="bg-slate-900 text-white rounded-lg px-4 py-2 text-sm font-medium hover:bg-slate-800">
-            + Log expense
-          </Link>
-          <Link
-            href="/transactions?add=income"
-            className="border border-slate-300 text-slate-700 rounded-lg px-4 py-2 text-sm font-medium hover:bg-slate-100"
-          >
-            + Log income
-          </Link>
+        <div className="w-10 h-10 rounded-full bg-accent text-white flex items-center justify-center font-display font-semibold text-sm">
+          {initials}
         </div>
       </div>
 
       {overdueCount > 0 && (
-        <div className="bg-red-50 border border-red-200 text-red-800 rounded-xl px-4 py-3 text-sm font-medium">
-          ⚠ You have {overdueCount} overdue payment{overdueCount !== 1 ? "s" : ""}. Check the list below.
+        <div className="bg-coral-soft text-coral rounded-2xl px-4 py-3 text-sm font-medium">
+          You have {overdueCount} overdue payment{overdueCount !== 1 ? "s" : ""}. Check the list below.
         </div>
       )}
 
-      <div className="bg-slate-900 text-white rounded-xl p-6">
-        <p className="text-sm text-slate-300">Net worth</p>
-        <p className="text-3xl font-semibold mt-1 tabular-nums">{formatMoney(netWorth)}</p>
-        <p className="text-xs text-slate-400 mt-2">
+      <div className="bg-accent text-white rounded-[22px] p-5 shadow-card">
+        <p className="text-sm text-white/70">Net worth</p>
+        <p className="font-display text-3xl font-semibold mt-1 tabular-nums">{formatMoney(netWorth)}</p>
+        <p className="text-xs text-white/70 mt-2 tabular-nums">
           Assets {formatMoney(totalAssets + Math.max(debtNet, 0))} · Liabilities {formatMoney(totalLiabilities + Math.max(-debtNet, 0))}
         </p>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-3 gap-2">
+        <Link href="/transactions?add=expense" className="flex flex-col items-center gap-1.5">
+          <span className="w-[52px] h-[52px] rounded-2xl bg-coral-soft text-coral flex items-center justify-center">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-[22px] h-[22px]">
+              <path d="M12 19V5M5 12l7-7 7 7" />
+            </svg>
+          </span>
+          <span className="text-[11px] font-medium text-ink">Expense</span>
+        </Link>
+        <Link href="/transactions?add=income" className="flex flex-col items-center gap-1.5">
+          <span className="w-[52px] h-[52px] rounded-2xl bg-mint-soft text-mint flex items-center justify-center">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-[22px] h-[22px]">
+              <path d="M12 5v14M5 12l7 7 7-7" />
+            </svg>
+          </span>
+          <span className="text-[11px] font-medium text-ink">Income</span>
+        </Link>
+        <Link href="/transactions?add=transfer" className="flex flex-col items-center gap-1.5">
+          <span className="w-[52px] h-[52px] rounded-2xl bg-accent-soft text-accent flex items-center justify-center">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-[22px] h-[22px]">
+              <path d="M7 7h13l-3-3M17 17H4l3 3" />
+            </svg>
+          </span>
+          <span className="text-[11px] font-medium text-ink">Transfer</span>
+        </Link>
+      </div>
+
+      <div className="flex gap-2.5 overflow-x-auto scrollbar-none -mx-4 px-4 pb-1" style={{ scrollSnapType: "x mandatory" }}>
         {summaryCards.map((c) => (
           <Link
             key={c.label}
             href={c.href}
-            className="bg-white border border-slate-200 rounded-xl p-4 hover:border-slate-300 transition-colors"
+            className="shrink-0 w-[132px] bg-white rounded-2xl shadow-card p-3"
+            style={{ scrollSnapAlign: "start" }}
           >
-            <p className="text-xs text-slate-500">{c.label}</p>
-            <p className={`text-lg font-semibold mt-1 tabular-nums ${c.negative ? "text-red-600" : "text-slate-900"}`}>
+            <p className="text-[11px] text-muted truncate">{c.label}</p>
+            <p className={`inline-block mt-2 text-sm font-display font-semibold tabular-nums px-2 py-1 rounded-lg ${tintClasses[c.tint]}`}>
               {formatMoney(c.value)}
             </p>
-            <p className="text-xs text-slate-400 mt-1">{c.sub}</p>
+            <p className="text-[10.5px] text-muted mt-1.5">{c.sub}</p>
           </Link>
         ))}
       </div>
 
       {activeGoals.length > 0 && (
-        <div className="bg-white border border-slate-200 rounded-xl p-4 sm:p-5">
+        <div className="bg-white rounded-2xl shadow-card p-4 sm:p-5">
           <div className="flex items-center justify-between mb-3">
-            <h2 className="font-semibold text-slate-900">Goals</h2>
-            <Link href="/goals" className="text-xs text-slate-400 hover:text-slate-600">
+            <h2 className="font-semibold text-ink">Goals</h2>
+            <Link href="/goals" className="text-xs text-muted hover:text-ink">
               View all
             </Link>
           </div>
@@ -212,13 +328,13 @@ export default async function DashboardPage() {
               return (
                 <Link key={goal.id} href="/goals" className="block group">
                   <div className="flex items-center justify-between text-sm mb-1">
-                    <span className="font-medium text-slate-900 group-hover:underline">{goal.name}</span>
-                    <span className="text-slate-500 tabular-nums">
+                    <span className="font-medium text-ink group-hover:underline">{goal.name}</span>
+                    <span className="text-muted tabular-nums">
                       {formatMoney(goal.saved)} of {formatMoney(goal.targetAmount)} ({pct}%)
                     </span>
                   </div>
-                  <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
-                    <div className="h-full rounded-full bg-slate-900" style={{ width: `${Math.min(pct, 100)}%` }} />
+                  <div className="h-2 rounded-full bg-accent-soft overflow-hidden">
+                    <div className="h-full rounded-full bg-accent" style={{ width: `${Math.min(pct, 100)}%` }} />
                   </div>
                 </Link>
               );
@@ -229,47 +345,67 @@ export default async function DashboardPage() {
 
       <RemindersCard reminderDaysBefore={user?.reminderDaysBefore ?? 3} />
 
-      <div className="bg-white border border-slate-200 rounded-xl">
-        <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
-          <h2 className="font-semibold text-slate-900">Upcoming dues (next 30 days)</h2>
-          <span className="text-xs text-slate-400">{upcoming.length} item{upcoming.length !== 1 ? "s" : ""}</span>
+      <div className="bg-white rounded-2xl shadow-card">
+        <div className="px-5 py-4 border-b border-border flex items-center justify-between">
+          <h2 className="font-semibold text-ink">Upcoming dues (next 30 days)</h2>
+          <span className="text-xs text-muted">{upcoming.length} item{upcoming.length !== 1 ? "s" : ""}</span>
         </div>
-        <div className="divide-y divide-slate-100">
+        <div className="divide-y divide-border">
           {upcoming.length === 0 && (
-            <p className="p-6 text-sm text-slate-500 text-center">Nothing due in the next 30 days. Add cards, loans or SIPs to track them here.</p>
+            <p className="p-6 text-sm text-muted text-center">Nothing due in the next 30 days. Add cards, loans or SIPs to track them here.</p>
           )}
           {upcoming.map((item) => (
-            <Link
-              key={item.key}
-              href={item.href}
-              className="flex items-center justify-between gap-4 px-5 py-3 hover:bg-slate-50"
-            >
-              <div>
-                <p className="font-medium text-slate-900 text-sm">{item.label}</p>
-                <p className="text-xs text-slate-500">{item.detail}</p>
+            <div key={item.key} className="flex items-center justify-between gap-4 px-5 py-3">
+              <Link href={item.href} className="min-w-0 hover:opacity-70">
+                <p className="font-medium text-ink text-sm truncate">{item.label}</p>
+                <p className="text-xs text-muted truncate">{item.detail}</p>
+              </Link>
+              <div className="flex items-center gap-2 shrink-0">
+                {item.kind === "urgency" && (
+                  <>
+                    <span className="text-sm font-medium text-ink tabular-nums">{item.amount > 0 ? formatMoney(item.amount) : ""}</span>
+                    <span className={`text-xs font-medium border rounded-full px-2.5 py-1 whitespace-nowrap ${urgencyStyles[item.urgency]}`}>
+                      {item.urgency === "later"
+                        ? item.dueDate.toLocaleDateString("en-IN", { day: "numeric", month: "short" })
+                        : urgencyLabels[item.urgency]}
+                    </span>
+                  </>
+                )}
+                {item.kind === "statement" && (
+                  <>
+                    <span className="text-sm font-medium text-ink tabular-nums">{formatMoney(item.amount)}</span>
+                    <span className={`text-xs font-medium border rounded-full px-2.5 py-1 whitespace-nowrap ${statementStatusStyles[item.statementStatus]}`}>
+                      {statementStatusLabels[item.statementStatus]}
+                    </span>
+                    <PayStatementButton
+                      cardId={item.cardId}
+                      cardLabel={item.cardLabel}
+                      statementOptions={item.statementOptions}
+                      bankAccounts={accounts}
+                      cards={cards}
+                    />
+                  </>
+                )}
+                {item.kind === "unbilled" && (
+                  <Link href="/cards" className="text-xs font-medium text-accent whitespace-nowrap">
+                    Set payment date →
+                  </Link>
+                )}
               </div>
-              <div className="flex items-center gap-3 shrink-0">
-                {item.amount > 0 && <span className="text-sm font-medium text-slate-900 tabular-nums">{formatMoney(item.amount)}</span>}
-                <span className={`text-xs font-medium border rounded-full px-2.5 py-1 whitespace-nowrap ${urgencyStyles[item.urgency]}`}>
-                  {item.urgency === "later"
-                    ? item.dueDate.toLocaleDateString("en-IN", { day: "numeric", month: "short" })
-                    : urgencyLabels[item.urgency]}
-                </span>
-              </div>
-            </Link>
+            </div>
           ))}
         </div>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Link href="/accounts" className="bg-white border border-slate-200 rounded-xl p-4 text-center hover:border-slate-300">
-          <p className="text-sm font-medium text-slate-900">+ Add bank account</p>
+        <Link href="/accounts" className="bg-white rounded-2xl shadow-card p-4 text-center hover:border-accent">
+          <p className="text-sm font-medium text-ink">+ Add bank account</p>
         </Link>
-        <Link href="/cards" className="bg-white border border-slate-200 rounded-xl p-4 text-center hover:border-slate-300">
-          <p className="text-sm font-medium text-slate-900">+ Add credit card</p>
+        <Link href="/cards" className="bg-white rounded-2xl shadow-card p-4 text-center hover:border-accent">
+          <p className="text-sm font-medium text-ink">+ Add credit card</p>
         </Link>
-        <Link href="/loans" className="bg-white border border-slate-200 rounded-xl p-4 text-center hover:border-slate-300">
-          <p className="text-sm font-medium text-slate-900">+ Add loan</p>
+        <Link href="/loans" className="bg-white rounded-2xl shadow-card p-4 text-center hover:border-accent">
+          <p className="text-sm font-medium text-ink">+ Add loan</p>
         </Link>
       </div>
     </div>
