@@ -157,9 +157,18 @@ function CardRow({
           {card.last4 ? ` ••${card.last4}` : ""}
         </p>
         <div className="flex items-center justify-between gap-3 mt-1">
-          <p className="text-sm text-muted tabular-nums">{formatMoney(card.currentBalance)} outstanding</p>
+          <div>
+            <p className="text-sm text-muted tabular-nums">{formatMoney(card.currentBalance)} outstanding</p>
+            <p className="text-xs text-muted tabular-nums mt-0.5">
+              {formatMoney(card.creditLimit)} limit · {utilization}% used
+            </p>
+          </div>
           <div className="flex items-center gap-3 shrink-0">
-            {urgency ? (
+            {card.currentBalance <= 0 ? (
+              <span className="text-xs font-medium border rounded-full px-2.5 py-1 whitespace-nowrap bg-mint-soft text-mint border-mint/30">
+                Paid off
+              </span>
+            ) : urgency ? (
               <span className={`text-xs font-medium border rounded-full px-2.5 py-1 whitespace-nowrap ${urgencyStyles[urgency]}`}>
                 {urgency === "later" ? card.nextDueDate!.toLocaleDateString("en-IN", { day: "numeric", month: "short" }) : urgencyLabels[urgency]}
               </span>

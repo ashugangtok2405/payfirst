@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -38,6 +38,14 @@ export default function BottomNav({
 }) {
   const pathname = usePathname();
   const [moreOpen, setMoreOpen] = useState(false);
+
+  // Belt-and-suspenders: whatever triggered the navigation (a Link inside
+  // the sheet, sign-out, browser back/forward), never leave the full-screen
+  // backdrop mounted on the new page - it would block every tap and all
+  // scrolling behind it.
+  useEffect(() => {
+    setMoreOpen(false);
+  }, [pathname]);
 
   function isActive(href: string) {
     return pathname === href || (pathname?.startsWith(href + "/") ?? false);
