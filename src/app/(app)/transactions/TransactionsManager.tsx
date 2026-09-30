@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { Suspense, useMemo, useState, useTransition } from "react";
+import { useSearchParams } from "next/navigation";
 import type { BankAccount, CreditCard, Loan, MutualFund, Transaction } from "@prisma/client";
 import { createTransaction, updateTransaction, deleteTransaction } from "./actions";
 import { TextField, SelectField, inputClass, labelClass, primaryButtonClass, ghostButtonClass, dangerButtonClass } from "@/components/form";
@@ -195,7 +196,7 @@ function TransactionFields({
   );
 }
 
-export default function TransactionsManager({
+function TransactionsManagerInner({
   transactions,
   bankAccounts,
   cards,
@@ -204,8 +205,12 @@ export default function TransactionsManager({
   expenseCategories,
   incomeCategories,
 }: Props) {
-  const [adding, setAdding] = useState(false);
-  const [addType, setAddType] = useState<TxnType>("expense");
+  const searchParams = useSearchParams();
+  const requestedType = searchParams.get("add");
+  const validRequestedType = requestedType === "expense" || requestedType === "income" || requestedType === "transfer" ? requestedType : null;
+
+  const [adding, setAdding] = useState(validRequestedType != null);
+  const [addType, setAddType] = useState<TxnType>(validRequestedType ?? "expense");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editType, setEditType] = useState<TxnType>("expense");
   const [pending, startTransition] = useTransition();
@@ -381,5 +386,13 @@ export default function TransactionsManager({
         )}
       </div>
     </div>
+  );
+}
+
+export default function TransactionsManager(props: Props) {
+  return (
+    <Suspense>
+      <TransactionsManagerInner {...props} />
+    </Suspense>
   );
 }

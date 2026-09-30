@@ -13,6 +13,13 @@ import {
 } from "@/lib/dueDates";
 import RemindersCard from "../reminders/RemindersCard";
 
+type GoalProgress = {
+  id: string;
+  name: string;
+  targetAmount: number;
+  saved: number;
+};
+
 type DueItem = {
   key: string;
   label: string;
@@ -28,7 +35,7 @@ export default async function DashboardPage() {
   const session = await auth();
   const userId = session!.user.id;
 
-  const [accounts, cards, loans, funds, debts, user, payments] = await Promise.all([
+  const [accounts, cards, loans, funds, debts, user, payments, goals] = await Promise.all([
     prisma.bankAccount.findMany({ where: { userId } }),
     prisma.creditCard.findMany({ where: { userId } }),
     prisma.loan.findMany({ where: { userId } }),
@@ -39,7 +46,12 @@ export default async function DashboardPage() {
       where: { userId, type: "transfer", toAccountType: { in: ["card", "loan"] } },
       select: { toAccountType: true, toAccountId: true, date: true },
     }),
+    prisma.goal.findMany({ where: { userId }, include: { contributions: { select: { amount: true } } } }),
   ]);
+
+  const activeGoals: GoalProgress[] = goals
+    .map((g) => ({ id: g.id, name: g.name, targetAmount: g.targetAmount, saved: g.contributions.reduce((s, c) => s + c.amount, 0) }))
+    .filter((g) => g.saved < g.targetAmount);
 
   function paidThisCycle(type: "card" | "loan", id: string, dueDay: number) {
     const cycleEnd = nextOccurrenceForDay(dueDay);
@@ -136,11 +148,24 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold text-slate-900">
-          Welcome back{session?.user?.name ? `, ${session.user.name}` : ""}
-        </h1>
-        <p className="text-sm text-slate-500">Here&apos;s where things stand today.</p>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-xl font-semibold text-slate-900">
+            Welcome back{session?.user?.name ? `, ${session.user.name}` : ""}
+          </h1>
+          <p className="text-sm text-slate-500">Here&apos;s where things stand today.</p>
+        </div>
+        <div className="flex gap-2">
+          <Link href="/transactions?add=expense" className="bg-slate-900 text-white rounded-lg px-4 py-2 text-sm font-medium hover:bg-slate-800">
+            + Log expense
+          </Link>
+          <Link
+            href="/transactions?add=income"
+            className="border border-slate-300 text-slate-700 rounded-lg px-4 py-2 text-sm font-medium hover:bg-slate-100"
+          >
+            + Log income
+          </Link>
+        </div>
       </div>
 
       {overdueCount > 0 && (
@@ -172,6 +197,35 @@ export default async function DashboardPage() {
           </Link>
         ))}
       </div>
+
+      {activeGoals.length > 0 && (
+        <div className="bg-white border border-slate-200 rounded-xl p-4 sm:p-5">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="font-semibold text-slate-900">Goals</h2>
+            <Link href="/goals" className="text-xs text-slate-400 hover:text-slate-600">
+              View all
+            </Link>
+          </div>
+          <div className="space-y-3">
+            {activeGoals.map((goal) => {
+              const pct = goal.targetAmount > 0 ? Math.round((goal.saved / goal.targetAmount) * 100) : 0;
+              return (
+                <Link key={goal.id} href="/goals" className="block group">
+                  <div className="flex items-center justify-between text-sm mb-1">
+                    <span className="font-medium text-slate-900 group-hover:underline">{goal.name}</span>
+                    <span className="text-slate-500 tabular-nums">
+                      {formatMoney(goal.saved)} of {formatMoney(goal.targetAmount)} ({pct}%)
+                    </span>
+                  </div>
+                  <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
+                    <div className="h-full rounded-full bg-slate-900" style={{ width: `${Math.min(pct, 100)}%` }} />
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <RemindersCard reminderDaysBefore={user?.reminderDaysBefore ?? 3} />
 
