@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { todayInAppTimeZone, nextOccurrenceForDay, previousOccurrenceForDay, daysUntil, formatDateKey } from "@/lib/dueDates";
+import { todayInAppTimeZone, nextOccurrenceForDay, previousOccurrenceForDay, daysUntil, formatDateKey, endOfDayExclusive } from "@/lib/dueDates";
 import webpush from "web-push";
 
 webpush.setVapidDetails(
@@ -44,10 +44,10 @@ export async function GET(request: Request) {
     const items: DueItem[] = [];
 
     function paidThisCycle(type: "card" | "loan", id: string, dueDay: number) {
-      const cycleEnd = nextOccurrenceForDay(dueDay, today);
+      const cycleEnd = endOfDayExclusive(nextOccurrenceForDay(dueDay, today));
       const cycleStart = previousOccurrenceForDay(dueDay, today);
       return user.transactions.some(
-        (t) => t.toAccountType === type && t.toAccountId === id && t.date > cycleStart && t.date <= cycleEnd
+        (t) => t.toAccountType === type && t.toAccountId === id && t.date > cycleStart && t.date < cycleEnd
       );
     }
 

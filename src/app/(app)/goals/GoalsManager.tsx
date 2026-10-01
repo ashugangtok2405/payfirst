@@ -3,7 +3,8 @@
 import { useState, useTransition } from "react";
 import type { BankAccount } from "@prisma/client";
 import { createGoal, updateGoal, deleteGoal, contributeToGoal } from "./actions";
-import { TextField, SelectField, primaryButtonClass, ghostButtonClass, dangerButtonClass, inputClass, labelClass } from "@/components/form";
+import { TextField, SelectField, primaryButtonClass, ghostButtonClass, inputClass, labelClass } from "@/components/form";
+import ConfirmButton from "@/components/ConfirmButton";
 import { formatMoney } from "@/lib/format";
 import { todayInAppTimeZone, daysUntil } from "@/lib/dueDates";
 
@@ -159,8 +160,7 @@ export default function GoalsManager({ goals, bankAccounts }: { goals: GoalRow[]
     });
   }
 
-  function handleDelete(id: string, name: string) {
-    if (!confirm(`Delete "${name}"? Past contributions stay in your Transactions, just unlinked from this goal.`)) return;
+  function handleDelete(id: string) {
     startTransition(async () => {
       await deleteGoal(id);
     });
@@ -249,9 +249,12 @@ export default function GoalsManager({ goals, bankAccounts }: { goals: GoalRow[]
                   <button onClick={() => setEditingId(goal.id)} className={ghostButtonClass}>
                     Edit
                   </button>
-                  <button onClick={() => handleDelete(goal.id, goal.name)} className={dangerButtonClass}>
+                  <ConfirmButton
+                    message={`Delete "${goal.name}"? Past contributions stay in your Transactions, just unlinked from this goal.`}
+                    onConfirm={() => handleDelete(goal.id)}
+                  >
                     Delete
-                  </button>
+                  </ConfirmButton>
                 </div>
               </div>
               <div className="mt-3 h-2 rounded-full bg-accent-soft overflow-hidden">

@@ -10,6 +10,7 @@ import {
   urgencyStyles,
   urgencyLabels,
   todayInAppTimeZone,
+  endOfDayExclusive,
   type Urgency,
 } from "@/lib/dueDates";
 import { remainingDueOf, statementStatusOf, statementStatusStyles, statementStatusLabels } from "@/lib/creditCardStatements";
@@ -90,9 +91,9 @@ export default async function DashboardPage() {
     .filter((g) => g.saved < g.targetAmount);
 
   function paidThisCycle(type: "card" | "loan", id: string, dueDay: number) {
-    const cycleEnd = nextOccurrenceForDay(dueDay);
+    const cycleEnd = endOfDayExclusive(nextOccurrenceForDay(dueDay));
     const cycleStart = previousOccurrenceForDay(dueDay);
-    return payments.some((p) => p.toAccountType === type && p.toAccountId === id && p.date > cycleStart && p.date <= cycleEnd);
+    return payments.some((p) => p.toAccountType === type && p.toAccountId === id && p.date > cycleStart && p.date < cycleEnd);
   }
 
   const todayDate = todayInAppTimeZone();

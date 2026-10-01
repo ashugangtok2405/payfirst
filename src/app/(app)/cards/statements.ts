@@ -3,7 +3,7 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
-import { previousOccurrenceForDay, nextOccurrenceForDay, todayInAppTimeZone } from "@/lib/dueDates";
+import { previousOccurrenceForDay, nextOccurrenceForDay, todayInAppTimeZone, endOfDayExclusive } from "@/lib/dueDates";
 import { remainingDueOf } from "@/lib/creditCardStatements";
 import { createTransaction } from "@/app/(app)/transactions/actions";
 import type { Transaction } from "@prisma/client";
@@ -81,7 +81,7 @@ export async function generateStatement(cardId: string) {
       where: {
         userId,
         statementId: null,
-        date: { gte: periodStart, lte: periodEnd },
+        date: { gte: periodStart, lt: endOfDayExclusive(periodEnd) },
         OR: [
           { fromAccountType: "card", fromAccountId: cardId },
           { toAccountType: "card", toAccountId: cardId },

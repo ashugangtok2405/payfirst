@@ -83,6 +83,15 @@ export function previousOccurrenceForDay(day: number, today: Date = todayInAppTi
   return new Date(y, m, Math.min(clampedDay, daysInMonth(y, m)));
 }
 
+// nextOccurrenceForDay/previousOccurrenceForDay return midnight of the due
+// date, so a transaction dated any time later that same day (which is the
+// common case - transactions now carry a real time of day, not just a date)
+// would otherwise fail a plain `date <= cycleEnd` check. Use this as the
+// upper bound instead, to mean "through the end of that calendar day".
+export function endOfDayExclusive(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1);
+}
+
 export function daysUntil(date: Date, today: Date = todayInAppTimeZone()): number {
   const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
   const target = new Date(date.getFullYear(), date.getMonth(), date.getDate());

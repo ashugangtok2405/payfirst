@@ -3,7 +3,8 @@
 import { useState, useTransition } from "react";
 import type { MutualFund } from "@prisma/client";
 import { createMutualFund, updateMutualFund, deleteMutualFund } from "./actions";
-import { TextField, primaryButtonClass, ghostButtonClass, dangerButtonClass } from "@/components/form";
+import { TextField, primaryButtonClass, ghostButtonClass } from "@/components/form";
+import ConfirmButton from "@/components/ConfirmButton";
 import { formatMoney, ordinal } from "@/lib/format";
 import { nextOccurrenceForDay, daysUntil, urgencyFromDays, urgencyStyles } from "@/lib/dueDates";
 
@@ -41,8 +42,7 @@ export default function FundsManager({ funds }: { funds: MutualFund[] }) {
     });
   }
 
-  function handleDelete(id: string, name: string) {
-    if (!confirm(`Delete "${name}"? This cannot be undone.`)) return;
+  function handleDelete(id: string) {
     startTransition(async () => {
       await deleteMutualFund(id);
     });
@@ -153,9 +153,9 @@ export default function FundsManager({ funds }: { funds: MutualFund[] }) {
                 <button onClick={() => setEditingId(fund.id)} className={ghostButtonClass}>
                   Edit
                 </button>
-                <button onClick={() => handleDelete(fund.id, fund.fundName)} className={dangerButtonClass}>
+                <ConfirmButton message={`Delete "${fund.fundName}"? This cannot be undone.`} onConfirm={() => handleDelete(fund.id)}>
                   Delete
-                </button>
+                </ConfirmButton>
               </div>
             </div>
           );

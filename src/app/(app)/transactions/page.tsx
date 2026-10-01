@@ -20,7 +20,10 @@ export default async function TransactionsPage({
   const isCurrentMonth = year === today.getFullYear() && month === today.getMonth();
 
   const [transactions, bankAccounts, cards, loans, funds, expenseCatRows, incomeCatRows, budgetRows] = await Promise.all([
-    prisma.transaction.findMany({ where: { userId, date: { gte: monthStart, lt: monthEnd } }, orderBy: { date: "desc" } }),
+    prisma.transaction.findMany({
+      where: { userId, date: { gte: monthStart, lt: monthEnd } },
+      orderBy: [{ date: "desc" }, { createdAt: "desc" }],
+    }),
     prisma.bankAccount.findMany({ where: { userId }, orderBy: { createdAt: "asc" } }),
     prisma.creditCard.findMany({ where: { userId }, orderBy: { createdAt: "asc" } }),
     prisma.loan.findMany({ where: { userId }, orderBy: { createdAt: "asc" } }),
@@ -43,12 +46,17 @@ export default async function TransactionsPage({
   const totalIncome = transactions.filter((t) => t.type === "income").reduce((s, t) => s + t.amount, 0);
 
   const spentByCategory = new Map<string, number>();
+  const incomeByCategory = new Map<string, number>();
   for (const txn of transactions) {
-    if (txn.type !== "expense") continue;
+    if (txn.type !== "expense" && txn.type !== "income") continue;
     const key = txn.category ?? "Other";
-    spentByCategory.set(key, (spentByCategory.get(key) ?? 0) + txn.amount);
+    const map = txn.type === "expense" ? spentByCategory : incomeByCategory;
+    map.set(key, (map.get(key) ?? 0) + txn.amount);
   }
   const categoryBreakdown = [...spentByCategory.entries()]
+    .map(([category, amount]) => ({ category, amount }))
+    .sort((a, b) => b.amount - a.amount);
+  const incomeBreakdown = [...incomeByCategory.entries()]
     .map(([category, amount]) => ({ category, amount }))
     .sort((a, b) => b.amount - a.amount);
 
@@ -72,6 +80,7 @@ export default async function TransactionsPage({
         totalExpense,
         totalIncome,
         categoryBreakdown,
+        incomeBreakdown,
       }}
     />
   );

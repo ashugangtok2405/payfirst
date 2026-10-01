@@ -4,7 +4,8 @@ import { useState, useTransition } from "react";
 import type { CreditCard, BankAccount, CreditCardStatement, CreditCardPayment, Transaction } from "@prisma/client";
 import { createCreditCard, updateCreditCard, deleteCreditCard } from "./actions";
 import { generateStatement, updateStatement, deleteStatement } from "./statements";
-import { TextField, primaryButtonClass, ghostButtonClass, dangerButtonClass } from "@/components/form";
+import { TextField, primaryButtonClass, ghostButtonClass } from "@/components/form";
+import ConfirmButton from "@/components/ConfirmButton";
 import { formatMoney, ordinal } from "@/lib/format";
 import { todayInAppTimeZone, daysUntil, urgencyFromDays, urgencyStyles, urgencyLabels } from "@/lib/dueDates";
 import { remainingDueOf, paidAmountOf, statementStatusOf, statementStatusStyles, statementStatusLabels } from "@/lib/creditCardStatements";
@@ -64,7 +65,6 @@ function StatementRow({ statement, today }: { statement: StatementWithPayments; 
   if (editing) return <StatementEditForm statement={statement} onDone={() => setEditing(false)} />;
 
   function handleDelete() {
-    if (!confirm(`Delete the ${periodLabel} statement? Any linked payments become unlinked, not deleted.`)) return;
     startTransition(async () => {
       await deleteStatement(statement.id);
     });
@@ -84,9 +84,13 @@ function StatementRow({ statement, today }: { statement: StatementWithPayments; 
         <button onClick={() => setEditing(true)} className={ghostButtonClass}>
           Edit
         </button>
-        <button onClick={handleDelete} disabled={pending} className={dangerButtonClass}>
+        <ConfirmButton
+          message={`Delete the ${periodLabel} statement? Any linked payments become unlinked, not deleted.`}
+          onConfirm={handleDelete}
+          disabled={pending}
+        >
           Delete
-        </button>
+        </ConfirmButton>
       </div>
     </div>
   );
@@ -261,9 +265,13 @@ function CardRow({
                 <button onClick={onStartEdit} className="font-medium text-muted hover:text-ink underline">
                   Edit card
                 </button>
-                <button onClick={onDelete} className="font-medium text-coral hover:text-coral underline">
+                <ConfirmButton
+                  message={`Delete "${card.cardName}"? This cannot be undone.`}
+                  onConfirm={onDelete}
+                  className="font-medium text-coral hover:text-coral underline"
+                >
                   Delete
-                </button>
+                </ConfirmButton>
                 <button onClick={() => setAdvancedOpen((v) => !v)} className="font-medium text-muted hover:text-ink underline ml-auto">
                   {advancedOpen ? "Hide" : "Show"} statement tracking (advanced)
                 </button>
@@ -346,8 +354,7 @@ export default function CardsManager({
     });
   }
 
-  function handleDelete(id: string, name: string) {
-    if (!confirm(`Delete "${name}"? This cannot be undone.`)) return;
+  function handleDelete(id: string) {
     startTransition(async () => {
       await deleteCreditCard(id);
     });
@@ -415,7 +422,7 @@ export default function CardsManager({
             onStartEdit={() => setEditingId(card.id)}
             onCancelEdit={() => setEditingId(null)}
             onSaveEdit={(e) => handleUpdate(card.id, e)}
-            onDelete={() => handleDelete(card.id, card.cardName)}
+            onDelete={() => handleDelete(card.id)}
             pending={pending}
           />
         ))}

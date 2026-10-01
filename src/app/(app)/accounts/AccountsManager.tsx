@@ -3,7 +3,8 @@
 import { useState, useTransition } from "react";
 import type { BankAccount } from "@prisma/client";
 import { createBankAccount, updateBankAccount, deleteBankAccount } from "./actions";
-import { TextField, SelectField, primaryButtonClass, ghostButtonClass, dangerButtonClass } from "@/components/form";
+import { TextField, SelectField, primaryButtonClass, ghostButtonClass } from "@/components/form";
+import ConfirmButton from "@/components/ConfirmButton";
 import { formatMoney } from "@/lib/format";
 
 const ACCOUNT_TYPES = [
@@ -48,8 +49,7 @@ export default function AccountsManager({ accounts }: { accounts: BankAccount[] 
     });
   }
 
-  function handleDelete(id: string, name: string) {
-    if (!confirm(`Delete "${name}"? This cannot be undone.`)) return;
+  function handleDelete(id: string) {
     startTransition(async () => {
       await deleteBankAccount(id);
     });
@@ -128,9 +128,12 @@ export default function AccountsManager({ accounts }: { accounts: BankAccount[] 
                   <button onClick={() => setEditingId(account.id)} className={ghostButtonClass}>
                     Edit
                   </button>
-                  <button onClick={() => handleDelete(account.id, account.accountName)} className={dangerButtonClass}>
+                  <ConfirmButton
+                    message={`Delete "${account.accountName}"? This cannot be undone.`}
+                    onConfirm={() => handleDelete(account.id)}
+                  >
                     Delete
-                  </button>
+                  </ConfirmButton>
                 </div>
               </div>
             </div>

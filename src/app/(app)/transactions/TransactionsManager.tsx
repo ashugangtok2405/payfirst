@@ -5,7 +5,8 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import type { BankAccount, CreditCard, Loan, MutualFund, Transaction } from "@prisma/client";
 import { createTransaction, updateTransaction, deleteTransaction } from "./actions";
-import { TextField, SelectField, inputClass, labelClass, primaryButtonClass, ghostButtonClass, dangerButtonClass } from "@/components/form";
+import { TextField, SelectField, inputClass, labelClass, primaryButtonClass, ghostButtonClass } from "@/components/form";
+import ConfirmButton from "@/components/ConfirmButton";
 import { formatMoney } from "@/lib/format";
 
 type MonthSummary = {
@@ -17,6 +18,7 @@ type MonthSummary = {
   totalExpense: number;
   totalIncome: number;
   categoryBreakdown: { category: string; amount: number }[];
+  incomeBreakdown: { category: string; amount: number }[];
 };
 
 type Props = {
@@ -31,9 +33,12 @@ type Props = {
 };
 
 function MonthlySummaryCard({ summary }: { summary: MonthSummary }) {
+  const [view, setView] = useState<"expense" | "income">("expense");
   const net = summary.totalIncome - summary.totalExpense;
-  const topCategories = summary.categoryBreakdown.slice(0, 6);
+  const breakdown = view === "expense" ? summary.categoryBreakdown : summary.incomeBreakdown;
+  const topCategories = breakdown.slice(0, 6);
   const maxAmount = topCategories[0]?.amount ?? 0;
+  const accentColor = view === "expense" ? "coral" : "mint";
 
   return (
     <div className="bg-white rounded-2xl shadow-card p-4 sm:p-5 space-y-4">
@@ -56,39 +61,50 @@ function MonthlySummaryCard({ summary }: { summary: MonthSummary }) {
       </div>
 
       <div className="grid grid-cols-3 gap-3">
-        <div className="bg-coral-soft rounded-xl px-3 py-2.5">
+        <button
+          type="button"
+          onClick={() => setView("expense")}
+          className={`text-left rounded-xl px-3 py-2.5 bg-coral-soft transition-shadow ${
+            view === "expense" ? "ring-2 ring-coral" : ""
+          }`}
+        >
           <p className="text-xs text-coral">Spent</p>
           <p className="font-semibold text-coral tabular-nums mt-0.5">{formatMoney(summary.totalExpense)}</p>
-        </div>
-        <div className="bg-mint-soft rounded-xl px-3 py-2.5">
+        </button>
+        <button
+          type="button"
+          onClick={() => setView("income")}
+          className={`text-left rounded-xl px-3 py-2.5 bg-mint-soft transition-shadow ${
+            view === "income" ? "ring-2 ring-mint" : ""
+          }`}
+        >
           <p className="text-xs text-mint">Income</p>
           <p className="font-semibold text-mint tabular-nums mt-0.5">{formatMoney(summary.totalIncome)}</p>
-        </div>
+        </button>
         <div className={`rounded-xl px-3 py-2.5 ${net >= 0 ? "bg-mint-soft" : "bg-coral-soft"}`}>
           <p className={`text-xs ${net >= 0 ? "text-mint" : "text-coral"}`}>Net</p>
           <p className={`font-semibold tabular-nums mt-0.5 ${net >= 0 ? "text-mint" : "text-coral"}`}>{formatMoney(net)}</p>
         </div>
       </div>
 
-      {topCategories.length > 0 && (
-        <div className="space-y-2">
-          <p className="text-xs text-muted">Where it went</p>
-          {topCategories.map((c) => (
-            <div key={c.category} className="flex items-center gap-3">
-              <span className="text-xs text-ink w-24 shrink-0 truncate">{c.category}</span>
-              <div className="flex-1 h-2 rounded-full bg-accent-soft overflow-hidden">
-                <div
-                  className="h-full rounded-full bg-accent"
-                  style={{ width: `${maxAmount > 0 ? Math.max((c.amount / maxAmount) * 100, 4) : 0}%` }}
-                />
-              </div>
-              <span className="text-xs text-muted tabular-nums w-20 shrink-0 text-right">{formatMoney(c.amount)}</span>
+      <div className="space-y-2">
+        <p className="text-xs text-muted">{view === "expense" ? "Where it went" : "Where it came from"}</p>
+        {topCategories.length === 0 && (
+          <p className="text-xs text-muted">{view === "expense" ? "Nothing spent this month yet." : "No income logged this month yet."}</p>
+        )}
+        {topCategories.map((c) => (
+          <div key={c.category} className="flex items-center gap-3">
+            <span className="text-xs text-ink w-24 shrink-0 truncate">{c.category}</span>
+            <div className={`flex-1 h-2 rounded-full ${accentColor === "coral" ? "bg-coral-soft" : "bg-mint-soft"} overflow-hidden`}>
+              <div
+                className={`h-full rounded-full ${accentColor === "coral" ? "bg-coral" : "bg-mint"}`}
+                style={{ width: `${maxAmount > 0 ? Math.max((c.amount / maxAmount) * 100, 4) : 0}%` }}
+              />
             </div>
-          ))}
-        </div>
-      )}
-
-      {topCategories.length === 0 && <p className="text-xs text-muted">Nothing spent this month yet.</p>}
+            <span className="text-xs text-muted tabular-nums w-20 shrink-0 text-right">{formatMoney(c.amount)}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -130,12 +146,44 @@ function CategoryField({ categories, defaultValue }: { categories: string[]; def
 
 type TxnType = "expense" | "income" | "transfer";
 
+// All date/time inputs are read and written in Asia/Kolkata explicitly,
+// never the browser's or server's own clock - this app has one user, in
+// India, and a server that may run in UTC (Vercel), so "today" or "now"
+// read off a bare `new Date()` would drift by the UTC offset for part of
+// the day otherwise.
+const APP_TIMEZONE = "Asia/Kolkata";
+
+function istParts(date: Date) {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: APP_TIMEZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date);
+  const get = (type: string) => parts.find((p) => p.type === type)!.value;
+  return { year: get("year"), month: get("month"), day: get("day"), hour: get("hour"), minute: get("minute") };
+}
+
 function todayInputValue() {
-  return new Date().toISOString().slice(0, 10);
+  const { year, month, day } = istParts(new Date());
+  return `${year}-${month}-${day}`;
 }
 
 function toDateInputValue(date: Date) {
-  return new Date(date).toISOString().slice(0, 10);
+  const { year, month, day } = istParts(new Date(date));
+  return `${year}-${month}-${day}`;
+}
+
+// Combines a "YYYY-MM-DD" date input (which day the user says this happened)
+// with the current moment's IST time (when they're actually logging/editing
+// it) into the exact UTC instant they represent, with an explicit +05:30
+// offset so the result doesn't depend on the server's own timezone.
+function combineDateWithNow(dateStr: string) {
+  const { hour, minute } = istParts(new Date());
+  return new Date(`${dateStr}T${hour}:${minute}:00+05:30`);
 }
 
 function TransactionFields({
@@ -314,10 +362,16 @@ function TransactionsManagerInner({
     return `${txn.category ?? "Transfer"} · ${from} → ${to}`;
   }
 
+  function withLoggedAtNow(formData: FormData) {
+    const dateStr = String(formData.get("date") ?? "");
+    formData.set("date", combineDateWithNow(dateStr).toISOString());
+    return formData;
+  }
+
   function handleCreate(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
-    const formData = new FormData(e.currentTarget);
+    const formData = withLoggedAtNow(new FormData(e.currentTarget));
     startTransition(async () => {
       try {
         await createTransaction(formData);
@@ -331,7 +385,7 @@ function TransactionsManagerInner({
   function handleUpdate(id: string, e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
-    const formData = new FormData(e.currentTarget);
+    const formData = withLoggedAtNow(new FormData(e.currentTarget));
     startTransition(async () => {
       try {
         await updateTransaction(id, formData);
@@ -342,8 +396,7 @@ function TransactionsManagerInner({
     });
   }
 
-  function handleDelete(id: string, label: string) {
-    if (!confirm(`Delete "${label}"? This will reverse its effect on your balances.`)) return;
+  function handleDelete(id: string) {
     startTransition(async () => {
       await deleteTransaction(id);
     });
@@ -437,7 +490,14 @@ function TransactionsManagerInner({
             <div key={txn.id} className="p-4 sm:p-5">
               <p className="font-medium text-ink text-sm">{describe(txn)}</p>
               <p className="text-xs text-muted mt-0.5">
-                {new Date(txn.date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+                {new Date(txn.date).toLocaleString("en-IN", {
+                  day: "numeric",
+                  month: "short",
+                  year: "numeric",
+                  hour: "numeric",
+                  minute: "2-digit",
+                  hour12: true,
+                })}
                 {txn.note ? ` · ${txn.note}` : ""}
               </p>
               <div className="flex items-center justify-between gap-3 mt-2">
@@ -455,9 +515,12 @@ function TransactionsManagerInner({
                   >
                     Edit
                   </button>
-                  <button onClick={() => handleDelete(txn.id, describe(txn))} className={dangerButtonClass}>
+                  <ConfirmButton
+                    message={`Delete "${describe(txn)}"? This will reverse its effect on your balances.`}
+                    onConfirm={() => handleDelete(txn.id)}
+                  >
                     Delete
-                  </button>
+                  </ConfirmButton>
                 </div>
               </div>
             </div>

@@ -3,7 +3,8 @@
 import { useState, useTransition } from "react";
 import type { Loan, BankAccount, CreditCard } from "@prisma/client";
 import { createLoan, updateLoan, deleteLoan } from "./actions";
-import { TextField, SelectField, primaryButtonClass, ghostButtonClass, dangerButtonClass } from "@/components/form";
+import { TextField, SelectField, primaryButtonClass, ghostButtonClass } from "@/components/form";
+import ConfirmButton from "@/components/ConfirmButton";
 import { formatMoney, ordinal } from "@/lib/format";
 import { nextOccurrenceForDay, daysUntil, urgencyFromDays, urgencyStyles } from "@/lib/dueDates";
 import MakePaymentButton from "@/components/MakePaymentButton";
@@ -66,8 +67,7 @@ export default function LoansManager({
     });
   }
 
-  function handleDelete(id: string, name: string) {
-    if (!confirm(`Delete "${name}"? This cannot be undone.`)) return;
+  function handleDelete(id: string) {
     startTransition(async () => {
       await deleteLoan(id);
     });
@@ -75,6 +75,15 @@ export default function LoansManager({
 
   const totalOutstanding = loans.reduce((sum, l) => sum + l.outstanding, 0);
   const totalEmi = loans.reduce((sum, l) => sum + (l.emiAmount ?? 0), 0);
+
+  const autoDebitOptions = [
+    { value: "", label: "None - I'll pay manually" },
+    ...bankAccounts.map((a) => ({ value: a.id, label: `${a.accountName} (${a.bankName})` })),
+  ];
+  const accountLabel = (id: string | null) => {
+    const account = bankAccounts.find((a) => a.id === id);
+    return account ? `${account.accountName} (${account.bankName})` : null;
+  };
 
   return (
     <div className="space-y-4">
@@ -104,7 +113,11 @@ export default function LoansManager({
           <TextField label="EMI due date (day of month)" name="emiDueDay" type="number" min={1} max={31} defaultValue={5} required />
           <TextField label="Start date" name="startDate" type="date" />
           <TextField label="Tenure (months)" name="tenureMonths" type="number" />
+          <SelectField label="Auto-debit EMI from" name="autoDebitAccountId" options={autoDebitOptions} defaultValue="" />
           <TextField label="Notes" name="notes" placeholder="Optional" />
+          <p className="sm:col-span-2 text-xs text-muted -mt-2">
+            When set, the EMI is debited from this account automatically on the due date. If the balance is too low, you'll get a reminder instead.
+          </p>
           <div className="sm:col-span-2 flex justify-end gap-2">
             <button type="submit" disabled={pending} className={primaryButtonClass}>
               Save loan
@@ -139,6 +152,12 @@ export default function LoansManager({
               <TextField label="EMI due date (day of month)" name="emiDueDay" type="number" min={1} max={31} required defaultValue={loan.emiDueDay} />
               <TextField label="Start date" name="startDate" type="date" defaultValue={toDateInputValue(loan.startDate)} />
               <TextField label="Tenure (months)" name="tenureMonths" type="number" defaultValue={loan.tenureMonths} />
+              <SelectField
+                label="Auto-debit EMI from"
+                name="autoDebitAccountId"
+                options={autoDebitOptions}
+                defaultValue={loan.autoDebitAccountId ?? ""}
+              />
               <TextField label="Notes" name="notes" defaultValue={loan.notes} />
               <div className="sm:col-span-2 flex justify-end gap-2">
                 <button type="button" onClick={() => setEditingId(null)} className={ghostButtonClass}>
@@ -158,6 +177,13 @@ export default function LoansManager({
                 <p className="text-xs text-muted">
                   {formatMoney(loan.outstanding)} outstanding of {formatMoney(loan.principal)} ({paidOffPct}% paid off)
                   {loan.emiAmount ? ` · EMI ${formatMoney(loan.emiAmount)}` : ""}
+                </p>
+                <p className="text-xs text-muted mt-0.5">
+                  {accountLabel(loan.autoDebitAccountId) ? (
+                    <>Auto-debit from {accountLabel(loan.autoDebitAccountId)}</>
+                  ) : (
+                    "No auto-debit set — paid manually"
+                  )}
                 </p>
               </div>
               <div className="flex items-center gap-3">
@@ -181,9 +207,9 @@ export default function LoansManager({
                 <button onClick={() => setEditingId(loan.id)} className={ghostButtonClass}>
                   Edit
                 </button>
-                <button onClick={() => handleDelete(loan.id, loan.loanName)} className={dangerButtonClass}>
+                <ConfirmButton message={`Delete "${loan.loanName}"? This cannot be undone.`} onConfirm={() => handleDelete(loan.id)}>
                   Delete
-                </button>
+                </ConfirmButton>
               </div>
             </div>
           );

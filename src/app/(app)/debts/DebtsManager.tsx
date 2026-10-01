@@ -3,7 +3,8 @@
 import { useState, useTransition } from "react";
 import type { Debt } from "@prisma/client";
 import { createDebt, updateDebt, deleteDebt, toggleDebtSettled } from "./actions";
-import { TextField, SelectField, primaryButtonClass, ghostButtonClass, dangerButtonClass } from "@/components/form";
+import { TextField, SelectField, primaryButtonClass, ghostButtonClass } from "@/components/form";
+import ConfirmButton from "@/components/ConfirmButton";
 import { formatMoney } from "@/lib/format";
 import { daysUntil, urgencyFromDays, urgencyStyles } from "@/lib/dueDates";
 
@@ -51,8 +52,7 @@ export default function DebtsManager({ debts }: { debts: Debt[] }) {
     });
   }
 
-  function handleDelete(id: string, name: string) {
-    if (!confirm(`Delete debt with "${name}"? This cannot be undone.`)) return;
+  function handleDelete(id: string) {
     startTransition(async () => {
       await deleteDebt(id);
     });
@@ -150,9 +150,12 @@ export default function DebtsManager({ debts }: { debts: Debt[] }) {
                 <button onClick={() => setEditingId(debt.id)} className={ghostButtonClass}>
                   Edit
                 </button>
-                <button onClick={() => handleDelete(debt.id, debt.personName)} className={dangerButtonClass}>
+                <ConfirmButton
+                  message={`Delete debt with "${debt.personName}"? This cannot be undone.`}
+                  onConfirm={() => handleDelete(debt.id)}
+                >
                   Delete
-                </button>
+                </ConfirmButton>
               </div>
             </div>
           );

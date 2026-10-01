@@ -30,13 +30,21 @@ function parseLoanFields(formData: FormData) {
     startDate: startDateRaw ? new Date(startDateRaw) : null,
     tenureMonths: formData.get("tenureMonths") ? Number(formData.get("tenureMonths")) : null,
     notes: String(formData.get("notes") ?? "").trim() || null,
+    autoDebitAccountId: String(formData.get("autoDebitAccountId") ?? "").trim() || null,
   };
+}
+
+async function assertOwnedAccountOrNull(accountId: string | null, userId: string) {
+  if (!accountId) return;
+  const account = await prisma.bankAccount.findUnique({ where: { id: accountId } });
+  if (!account || account.userId !== userId) throw new Error("Bank account not found.");
 }
 
 export async function createLoan(formData: FormData) {
   const userId = await requireUserId();
   const data = parseLoanFields(formData);
   if (!data.loanName || !data.lender) throw new Error("Loan name and lender are required.");
+  await assertOwnedAccountOrNull(data.autoDebitAccountId, userId);
 
   await prisma.loan.create({ data: { ...data, userId } });
   revalidatePath("/loans");
@@ -49,6 +57,7 @@ export async function updateLoan(id: string, formData: FormData) {
   if (!existing || existing.userId !== userId) throw new Error("Not found");
 
   const data = parseLoanFields(formData);
+  await assertOwnedAccountOrNull(data.autoDebitAccountId, userId);
   await prisma.loan.update({ where: { id }, data });
   revalidatePath("/loans");
   revalidatePath("/dashboard");
