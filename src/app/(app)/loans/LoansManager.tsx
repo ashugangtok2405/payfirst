@@ -169,7 +169,7 @@ export default function LoansManager({
               </div>
             </form>
           ) : (
-            <div key={loan.id} className="p-4 sm:p-5 flex flex-wrap items-center justify-between gap-4">
+            <div key={loan.id} className="bg-white rounded-2xl shadow-card p-4 sm:p-5 flex flex-wrap items-center justify-between gap-4">
               <div>
                 <p className="font-medium text-ink">
                   {loan.loanName} <span className="text-muted font-normal text-sm">· {loan.lender}</span>
