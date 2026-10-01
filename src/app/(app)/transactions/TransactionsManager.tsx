@@ -32,13 +32,25 @@ type Props = {
   monthSummary: MonthSummary;
 };
 
-function MonthlySummaryCard({ summary }: { summary: MonthSummary }) {
-  const [view, setView] = useState<"expense" | "income">("expense");
+type TxnFilter = "all" | "expense" | "income";
+
+function MonthlySummaryCard({
+  summary,
+  filter,
+  onFilterChange,
+}: {
+  summary: MonthSummary;
+  filter: TxnFilter;
+  onFilterChange: (f: TxnFilter) => void;
+}) {
   const net = summary.totalIncome - summary.totalExpense;
-  const breakdown = view === "expense" ? summary.categoryBreakdown : summary.incomeBreakdown;
+  // The breakdown bars always show expense categories unless Income is the
+  // active filter - "All" (Net) has no single category breakdown, so it
+  // falls back to the same "Where it went" default the card always had.
+  const breakdownView = filter === "income" ? "income" : "expense";
+  const breakdown = breakdownView === "expense" ? summary.categoryBreakdown : summary.incomeBreakdown;
   const topCategories = breakdown.slice(0, 6);
   const maxAmount = topCategories[0]?.amount ?? 0;
-  const accentColor = view === "expense" ? "coral" : "mint";
 
   return (
     <div className="bg-white rounded-2xl shadow-card p-4 sm:p-5 space-y-4">
@@ -63,9 +75,9 @@ function MonthlySummaryCard({ summary }: { summary: MonthSummary }) {
       <div className="grid grid-cols-3 gap-3">
         <button
           type="button"
-          onClick={() => setView("expense")}
+          onClick={() => onFilterChange("expense")}
           className={`text-left rounded-xl px-3 py-2.5 bg-coral-soft transition-shadow ${
-            view === "expense" ? "ring-2 ring-coral" : ""
+            filter === "expense" ? "ring-2 ring-coral" : ""
           }`}
         >
           <p className="text-xs text-coral">Spent</p>
@@ -73,31 +85,37 @@ function MonthlySummaryCard({ summary }: { summary: MonthSummary }) {
         </button>
         <button
           type="button"
-          onClick={() => setView("income")}
+          onClick={() => onFilterChange("income")}
           className={`text-left rounded-xl px-3 py-2.5 bg-mint-soft transition-shadow ${
-            view === "income" ? "ring-2 ring-mint" : ""
+            filter === "income" ? "ring-2 ring-mint" : ""
           }`}
         >
           <p className="text-xs text-mint">Income</p>
           <p className="font-semibold text-mint tabular-nums mt-0.5">{formatMoney(summary.totalIncome)}</p>
         </button>
-        <div className={`rounded-xl px-3 py-2.5 ${net >= 0 ? "bg-mint-soft" : "bg-coral-soft"}`}>
+        <button
+          type="button"
+          onClick={() => onFilterChange("all")}
+          className={`text-left rounded-xl px-3 py-2.5 ${net >= 0 ? "bg-mint-soft" : "bg-coral-soft"} transition-shadow ${
+            filter === "all" ? `ring-2 ${net >= 0 ? "ring-mint" : "ring-coral"}` : ""
+          }`}
+        >
           <p className={`text-xs ${net >= 0 ? "text-mint" : "text-coral"}`}>Net</p>
           <p className={`font-semibold tabular-nums mt-0.5 ${net >= 0 ? "text-mint" : "text-coral"}`}>{formatMoney(net)}</p>
-        </div>
+        </button>
       </div>
 
       <div className="space-y-2">
-        <p className="text-xs text-muted">{view === "expense" ? "Where it went" : "Where it came from"}</p>
+        <p className="text-xs text-muted">{breakdownView === "expense" ? "Where it went" : "Where it came from"}</p>
         {topCategories.length === 0 && (
-          <p className="text-xs text-muted">{view === "expense" ? "Nothing spent this month yet." : "No income logged this month yet."}</p>
+          <p className="text-xs text-muted">{breakdownView === "expense" ? "Nothing spent this month yet." : "No income logged this month yet."}</p>
         )}
         {topCategories.map((c) => (
           <div key={c.category} className="flex items-center gap-3">
             <span className="text-xs text-ink w-24 shrink-0 truncate">{c.category}</span>
-            <div className={`flex-1 h-2 rounded-full ${accentColor === "coral" ? "bg-coral-soft" : "bg-mint-soft"} overflow-hidden`}>
+            <div className={`flex-1 h-2 rounded-full ${breakdownView === "expense" ? "bg-coral-soft" : "bg-mint-soft"} overflow-hidden`}>
               <div
-                className={`h-full rounded-full ${accentColor === "coral" ? "bg-coral" : "bg-mint"}`}
+                className={`h-full rounded-full ${breakdownView === "expense" ? "bg-coral" : "bg-mint"}`}
                 style={{ width: `${maxAmount > 0 ? Math.max((c.amount / maxAmount) * 100, 4) : 0}%` }}
               />
             </div>
@@ -340,6 +358,12 @@ function TransactionsManagerInner({
   const [editType, setEditType] = useState<TxnType>("expense");
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [filter, setFilter] = useState<TxnFilter>("all");
+
+  const visibleTransactions = useMemo(
+    () => (filter === "all" ? transactions : transactions.filter((t) => t.type === filter)),
+    [transactions, filter]
+  );
 
   const accountLabel = useMemo(() => {
     const map = new Map<string, string>();
@@ -425,7 +449,7 @@ function TransactionsManagerInner({
         </button>
       </div>
 
-      <MonthlySummaryCard summary={monthSummary} />
+      <MonthlySummaryCard summary={monthSummary} filter={filter} onFilterChange={setFilter} />
 
       {error && <p className="text-sm text-coral">{error}</p>}
 
@@ -456,10 +480,16 @@ function TransactionsManagerInner({
       )}
 
       <div className="bg-white rounded-2xl shadow-card divide-y divide-border">
-        {transactions.length === 0 && (
-          <p className="p-6 text-sm text-muted text-center">No transactions logged yet.</p>
+        {visibleTransactions.length === 0 && (
+          <p className="p-6 text-sm text-muted text-center">
+            {filter === "all"
+              ? "No transactions logged yet."
+              : filter === "expense"
+                ? "No expenses this month."
+                : "No income this month."}
+          </p>
         )}
-        {transactions.map((txn) =>
+        {visibleTransactions.map((txn) =>
           editingId === txn.id ? (
             <form
               key={txn.id}
