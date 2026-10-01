@@ -28,7 +28,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="min-h-screen flex flex-col">
-      <main className="flex-1 w-full max-w-md mx-auto px-4 py-5 pb-28 min-w-0">{children}</main>
+      <main className="flex-1 w-full max-w-md md:max-w-2xl lg:max-w-4xl mx-auto px-4 py-5 pb-28 min-w-0">{children}</main>
 
       <BottomNav
         primaryItems={PRIMARY_ITEMS}

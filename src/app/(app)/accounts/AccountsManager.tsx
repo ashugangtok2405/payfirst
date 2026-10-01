@@ -89,7 +89,7 @@ export default function AccountsManager({ accounts }: { accounts: BankAccount[] 
         </form>
       )}
 
-      <div className="space-y-3">
+      <div className="space-y-3 lg:space-y-0 lg:grid lg:grid-cols-2 lg:gap-3 lg:items-start">
         {accounts.length === 0 && !adding && (
           <p className="bg-white rounded-2xl shadow-card p-6 text-sm text-muted text-center">No bank accounts yet. Add your first one above.</p>
         )}
@@ -98,7 +98,7 @@ export default function AccountsManager({ accounts }: { accounts: BankAccount[] 
             <form
               key={account.id}
               onSubmit={(e) => handleUpdate(account.id, e)}
-              className="bg-white rounded-2xl shadow-card p-5 grid grid-cols-1 sm:grid-cols-2 gap-4"
+              className="lg:col-span-2 bg-white rounded-2xl shadow-card p-5 grid grid-cols-1 sm:grid-cols-2 gap-4"
             >
               <TextField label="Account name" name="accountName" required defaultValue={account.accountName} />
               <TextField label="Bank name" name="bankName" required defaultValue={account.bankName} />

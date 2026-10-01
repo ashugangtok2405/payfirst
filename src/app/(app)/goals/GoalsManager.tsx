@@ -205,7 +205,7 @@ export default function GoalsManager({ goals, bankAccounts }: { goals: GoalRow[]
         </form>
       )}
 
-      <div className="space-y-3">
+      <div className="space-y-3 lg:space-y-0 lg:grid lg:grid-cols-2 lg:gap-3 lg:items-start">
         {goals.length === 0 && !adding && (
           <p className="bg-white rounded-2xl shadow-card p-6 text-sm text-muted text-center">No goals yet. Add your first one above.</p>
         )}
@@ -216,7 +216,7 @@ export default function GoalsManager({ goals, bankAccounts }: { goals: GoalRow[]
           const barColor = complete ? "bg-mint" : days != null && days < 0 ? "bg-coral" : "bg-accent";
 
           return editingId === goal.id ? (
-            <form key={goal.id} onSubmit={(e) => handleUpdate(goal.id, e)} className="bg-white rounded-2xl shadow-card p-5 space-y-4">
+            <form key={goal.id} onSubmit={(e) => handleUpdate(goal.id, e)} className="lg:col-span-2 bg-white rounded-2xl shadow-card p-5 space-y-4">
               <GoalFormFields bankAccounts={bankAccounts} goal={goal} />
               <div className="flex justify-end gap-2">
                 <button type="button" onClick={() => setEditingId(null)} className={ghostButtonClass}>

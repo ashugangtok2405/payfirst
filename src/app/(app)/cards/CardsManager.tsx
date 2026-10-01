@@ -150,7 +150,7 @@ function CardRow({
   const statementStatus = latestStatement ? statementStatusOf(latestStatement, today) : null;
 
   return (
-    <div className="bg-white rounded-2xl shadow-card overflow-hidden">
+    <div className={`bg-white rounded-2xl shadow-card overflow-hidden ${expanded ? "lg:col-span-2" : ""}`}>
       <button onClick={onToggle} className="w-full px-4 sm:px-5 py-3.5 text-left hover:bg-bg">
         <p className="font-medium text-ink text-sm truncate">
           {card.cardName} · {card.bankName}
@@ -397,7 +397,7 @@ export default function CardsManager({
         </form>
       )}
 
-      <div className="space-y-3">
+      <div className="space-y-3 lg:space-y-0 lg:grid lg:grid-cols-2 lg:gap-3 lg:items-start">
         {cards.length === 0 && !adding && (
           <p className="bg-white rounded-2xl shadow-card p-6 text-sm text-muted text-center">No credit cards yet. Add your first one above.</p>
         )}

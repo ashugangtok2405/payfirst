@@ -1,11 +1,23 @@
 "use client";
 
 import { Suspense, useMemo, useState, useTransition } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import type { BankAccount, CreditCard, Loan, MutualFund, Transaction } from "@prisma/client";
 import { createTransaction, updateTransaction, deleteTransaction } from "./actions";
 import { TextField, SelectField, inputClass, labelClass, primaryButtonClass, ghostButtonClass, dangerButtonClass } from "@/components/form";
 import { formatMoney } from "@/lib/format";
+
+type MonthSummary = {
+  monthLabel: string;
+  isCurrentMonth: boolean;
+  prevHref: string;
+  nextHref: string;
+  currentHref: string;
+  totalExpense: number;
+  totalIncome: number;
+  categoryBreakdown: { category: string; amount: number }[];
+};
 
 type Props = {
   transactions: Transaction[];
@@ -15,7 +27,71 @@ type Props = {
   funds: MutualFund[];
   expenseCategories: string[];
   incomeCategories: string[];
+  monthSummary: MonthSummary;
 };
+
+function MonthlySummaryCard({ summary }: { summary: MonthSummary }) {
+  const net = summary.totalIncome - summary.totalExpense;
+  const topCategories = summary.categoryBreakdown.slice(0, 6);
+  const maxAmount = topCategories[0]?.amount ?? 0;
+
+  return (
+    <div className="bg-white rounded-2xl shadow-card p-4 sm:p-5 space-y-4">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <h2 className="font-semibold text-ink">Monthly summary</h2>
+        <div className="flex items-center gap-2">
+          <Link href={summary.prevHref} className={ghostButtonClass} aria-label="Previous month">
+            ← Prev
+          </Link>
+          <span className="text-sm font-medium text-ink min-w-[8rem] text-center">{summary.monthLabel}</span>
+          <Link href={summary.nextHref} className={ghostButtonClass} aria-label="Next month">
+            Next →
+          </Link>
+          {!summary.isCurrentMonth && (
+            <Link href={summary.currentHref} className={ghostButtonClass}>
+              Today
+            </Link>
+          )}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-3 gap-3">
+        <div className="bg-coral-soft rounded-xl px-3 py-2.5">
+          <p className="text-xs text-coral">Spent</p>
+          <p className="font-semibold text-coral tabular-nums mt-0.5">{formatMoney(summary.totalExpense)}</p>
+        </div>
+        <div className="bg-mint-soft rounded-xl px-3 py-2.5">
+          <p className="text-xs text-mint">Income</p>
+          <p className="font-semibold text-mint tabular-nums mt-0.5">{formatMoney(summary.totalIncome)}</p>
+        </div>
+        <div className={`rounded-xl px-3 py-2.5 ${net >= 0 ? "bg-mint-soft" : "bg-coral-soft"}`}>
+          <p className={`text-xs ${net >= 0 ? "text-mint" : "text-coral"}`}>Net</p>
+          <p className={`font-semibold tabular-nums mt-0.5 ${net >= 0 ? "text-mint" : "text-coral"}`}>{formatMoney(net)}</p>
+        </div>
+      </div>
+
+      {topCategories.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs text-muted">Where it went</p>
+          {topCategories.map((c) => (
+            <div key={c.category} className="flex items-center gap-3">
+              <span className="text-xs text-ink w-24 shrink-0 truncate">{c.category}</span>
+              <div className="flex-1 h-2 rounded-full bg-accent-soft overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-accent"
+                  style={{ width: `${maxAmount > 0 ? Math.max((c.amount / maxAmount) * 100, 4) : 0}%` }}
+                />
+              </div>
+              <span className="text-xs text-muted tabular-nums w-20 shrink-0 text-right">{formatMoney(c.amount)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {topCategories.length === 0 && <p className="text-xs text-muted">Nothing spent this month yet.</p>}
+    </div>
+  );
+}
 
 const NEW_CATEGORY_VALUE = "__new__";
 
@@ -204,6 +280,7 @@ function TransactionsManagerInner({
   funds,
   expenseCategories,
   incomeCategories,
+  monthSummary,
 }: Props) {
   const searchParams = useSearchParams();
   const requestedType = searchParams.get("add");
@@ -294,6 +371,8 @@ function TransactionsManagerInner({
           {adding ? "Cancel" : "+ Add transaction"}
         </button>
       </div>
+
+      <MonthlySummaryCard summary={monthSummary} />
 
       {error && <p className="text-sm text-coral">{error}</p>}
 

@@ -92,7 +92,7 @@ export default function FundsManager({ funds }: { funds: MutualFund[] }) {
         </form>
       )}
 
-      <div className="space-y-3">
+      <div className="space-y-3 lg:space-y-0 lg:grid lg:grid-cols-2 lg:gap-3 lg:items-start">
         {funds.length === 0 && !adding && (
           <p className="bg-white rounded-2xl shadow-card p-6 text-sm text-muted text-center">No mutual funds yet. Add your first one above.</p>
         )}
@@ -107,7 +107,7 @@ export default function FundsManager({ funds }: { funds: MutualFund[] }) {
             <form
               key={fund.id}
               onSubmit={(e) => handleUpdate(fund.id, e)}
-              className="bg-white rounded-2xl shadow-card p-5 grid grid-cols-1 sm:grid-cols-2 gap-4"
+              className="lg:col-span-2 bg-white rounded-2xl shadow-card p-5 grid grid-cols-1 sm:grid-cols-2 gap-4"
             >
               <TextField label="Fund name" name="fundName" required defaultValue={fund.fundName} />
               <TextField label="Fund house" name="fundHouse" defaultValue={fund.fundHouse} />

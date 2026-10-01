@@ -92,7 +92,7 @@ export default function DebtsManager({ debts }: { debts: Debt[] }) {
         </form>
       )}
 
-      <div className="space-y-3">
+      <div className="space-y-3 lg:space-y-0 lg:grid lg:grid-cols-2 lg:gap-3 lg:items-start">
         {debts.length === 0 && !adding && (
           <p className="bg-white rounded-2xl shadow-card p-6 text-sm text-muted text-center">No debts tracked yet.</p>
         )}
@@ -104,7 +104,7 @@ export default function DebtsManager({ debts }: { debts: Debt[] }) {
             <form
               key={debt.id}
               onSubmit={(e) => handleUpdate(debt.id, e)}
-              className="bg-white rounded-2xl shadow-card p-5 grid grid-cols-1 sm:grid-cols-2 gap-4"
+              className="lg:col-span-2 bg-white rounded-2xl shadow-card p-5 grid grid-cols-1 sm:grid-cols-2 gap-4"
             >
               <TextField label="Person / party" name="personName" required defaultValue={debt.personName} />
               <SelectField label="Direction" name="direction" options={DIRECTIONS} defaultValue={debt.direction} />

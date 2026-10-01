@@ -297,12 +297,15 @@ export default async function DashboardPage() {
         </Link>
       </div>
 
-      <div className="flex gap-2.5 overflow-x-auto scrollbar-none -mx-4 px-4 pb-1" style={{ scrollSnapType: "x mandatory" }}>
+      <div
+        className="flex md:grid md:grid-cols-4 gap-2.5 md:gap-3 overflow-x-auto md:overflow-visible scrollbar-none -mx-4 px-4 md:mx-0 md:px-0 pb-1"
+        style={{ scrollSnapType: "x mandatory" }}
+      >
         {summaryCards.map((c) => (
           <Link
             key={c.label}
             href={c.href}
-            className="shrink-0 w-[132px] bg-white rounded-2xl shadow-card p-3"
+            className="shrink-0 w-[132px] md:w-auto bg-white rounded-2xl shadow-card p-3"
             style={{ scrollSnapAlign: "start" }}
           >
             <p className="text-[11px] text-muted truncate">{c.label}</p>
@@ -314,38 +317,41 @@ export default async function DashboardPage() {
         ))}
       </div>
 
-      {activeGoals.length > 0 && (
-        <div className="bg-white rounded-2xl shadow-card p-4 sm:p-5">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="font-semibold text-ink">Goals</h2>
-            <Link href="/goals" className="text-xs text-muted hover:text-ink">
-              View all
-            </Link>
-          </div>
-          <div className="space-y-3">
-            {activeGoals.map((goal) => {
-              const pct = goal.targetAmount > 0 ? Math.round((goal.saved / goal.targetAmount) * 100) : 0;
-              return (
-                <Link key={goal.id} href="/goals" className="block group">
-                  <div className="flex items-center justify-between text-sm mb-1">
-                    <span className="font-medium text-ink group-hover:underline">{goal.name}</span>
-                    <span className="text-muted tabular-nums">
-                      {formatMoney(goal.saved)} of {formatMoney(goal.targetAmount)} ({pct}%)
-                    </span>
-                  </div>
-                  <div className="h-2 rounded-full bg-accent-soft overflow-hidden">
-                    <div className="h-full rounded-full bg-accent" style={{ width: `${Math.min(pct, 100)}%` }} />
-                  </div>
+      <div className="lg:grid lg:grid-cols-3 lg:gap-5 lg:items-start space-y-5 lg:space-y-0">
+        <div className="lg:col-span-1 lg:order-2 space-y-5">
+          {activeGoals.length > 0 && (
+            <div className="bg-white rounded-2xl shadow-card p-4 sm:p-5">
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="font-semibold text-ink">Goals</h2>
+                <Link href="/goals" className="text-xs text-muted hover:text-ink">
+                  View all
                 </Link>
-              );
-            })}
-          </div>
+              </div>
+              <div className="space-y-3">
+                {activeGoals.map((goal) => {
+                  const pct = goal.targetAmount > 0 ? Math.round((goal.saved / goal.targetAmount) * 100) : 0;
+                  return (
+                    <Link key={goal.id} href="/goals" className="block group">
+                      <div className="flex items-center justify-between text-sm mb-1">
+                        <span className="font-medium text-ink group-hover:underline">{goal.name}</span>
+                        <span className="text-muted tabular-nums">
+                          {formatMoney(goal.saved)} of {formatMoney(goal.targetAmount)} ({pct}%)
+                        </span>
+                      </div>
+                      <div className="h-2 rounded-full bg-accent-soft overflow-hidden">
+                        <div className="h-full rounded-full bg-accent" style={{ width: `${Math.min(pct, 100)}%` }} />
+                      </div>
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          <RemindersCard reminderDaysBefore={user?.reminderDaysBefore ?? 3} />
         </div>
-      )}
 
-      <RemindersCard reminderDaysBefore={user?.reminderDaysBefore ?? 3} />
-
-      <div className="bg-white rounded-2xl shadow-card">
+      <div className="lg:col-span-2 lg:order-1 bg-white rounded-2xl shadow-card">
         <div className="px-5 py-4 border-b border-border flex items-center justify-between">
           <h2 className="font-semibold text-ink">Upcoming dues (next 30 days)</h2>
           <span className="text-xs text-muted">{upcoming.length} item{upcoming.length !== 1 ? "s" : ""}</span>
@@ -395,6 +401,7 @@ export default async function DashboardPage() {
             </div>
           ))}
         </div>
+      </div>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
